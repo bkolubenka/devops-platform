@@ -4,9 +4,10 @@ Containerized fullstack pet project deployed to an Ubuntu VM with Ansible, Docke
 
 ## What This Project Shows
 
-- FastAPI backend with portfolio and demo AI endpoints
+- FastAPI backend with portfolio, service catalog, overview, and incident-assistant AI endpoints
 - static frontend served separately from the backend
 - PostgreSQL-backed persistence
+- CRUD management for projects and services
 - Nginx reverse proxy on the VM
 - Ansible-based deployment
 - GitHub Actions CI
@@ -54,7 +55,8 @@ app/
     index.html
     Dockerfile
   nginx/
-    default.conf
+    dev.conf
+    prod.conf
 
 infra/
   ansible/
@@ -74,8 +76,11 @@ infra/
 - `/` -> frontend
 - `/health` -> health check through Nginx
 - `/api/health` -> backend health check
+- `/api/overview`
 - `/api/portfolio/projects`
 - `/api/portfolio/skills`
+- `/api/services`
+- `/api/ai/incidents/analyze`
 - `/api/ai/generate-text`
 - `/api/ai/models`
 
@@ -96,7 +101,7 @@ Then open:
 Manual deploy:
 
 ```bash
-ansible-playbook -i infra/ansible/inventory.ini infra/ansible/playbook.yml --ask-become-pass
+DEPLOY_REPO_REF=main ansible-playbook -i infra/ansible/inventory.ini infra/ansible/playbook.yml --ask-become-pass
 ```
 
 GitHub Actions deploy:
@@ -104,6 +109,7 @@ GitHub Actions deploy:
 - runs on a self-hosted runner installed on the VM
 - executes the Ansible playbook locally on that VM
 - is triggered manually with `workflow_dispatch`
+- updates application code on the VM via `git pull` strategy instead of Ansible file copy
 
 Branch policy:
 
