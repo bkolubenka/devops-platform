@@ -1,0 +1,36 @@
+- name: Setup server
+  hosts: all
+  become: true
+
+  tasks:
+    - name: Install Docker
+      apt:
+        name: docker.io
+        state: present
+        update_cache: yes
+
+    - name: Install docker-compose
+      apt:
+        name: docker-compose
+        state: present
+
+    - name: Start Docker
+      service:
+        name: docker
+        state: started
+        enabled: true
+        
+    - name: Create app directory
+      file:
+        path: /home/make/apps/devops-platform
+        state: directory
+
+    - name: Copy project to server
+      copy:
+        src: ../../
+        dest: /home/make/apps/devops-platform
+
+    - name: Run docker compose
+      command: docker-compose -f docker-compose.dev.yaml up -d --build
+      args:
+        chdir: /home/make/apps/devops-platform
