@@ -28,3 +28,27 @@ Keep changes aligned with the current VM-based deployment model.
 - Keep control-plane services restart-only from the UI.
 - Keep Docker actions out of the API request path; workers should execute queued service actions.
 - Keep log entries reusable by the assistant, but do not make autofill mandatory.
+
+## Infrastructure Rules (Strict)
+
+- Do NOT suggest manual fixes on the server.
+- All infrastructure changes MUST be implemented via Ansible.
+- If something is missing on the server (e.g. docker compose plugin), update the playbook instead of suggesting manual installation.
+- The system must work on a fresh VM with a single Ansible run.
+- Do NOT assume the server has preinstalled dependencies.
+
+## Docker Rules
+
+- Use `docker compose` (v2) only. Never use `docker-compose`.
+- The Ansible playbook must install docker compose plugin.
+- Do NOT suggest container cleanup commands as part of normal workflow:
+  - docker rm
+  - docker system prune
+- Do NOT introduce destructive operations into deployment.
+
+## Deployment Behavior
+
+- Prefer permanent fixes over temporary workarounds.
+- Do NOT suggest one-time manual fixes.
+- Deployment must remain idempotent.
+- Fix root causes in infrastructure code, not runtime hacks.
