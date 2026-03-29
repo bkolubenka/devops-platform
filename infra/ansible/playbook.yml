@@ -30,7 +30,29 @@
         src: ../../
         dest: /home/make/apps/devops-platform
 
+    - name: Stop existing docker compose stack
+      command: docker-compose -f docker-compose.dev.yaml down --remove-orphans
+      args:
+        chdir: /home/make/apps/devops-platform
+      failed_when: false
+
     - name: Run docker compose
       command: docker-compose -f docker-compose.dev.yaml up -d --build
       args:
         chdir: /home/make/apps/devops-platform
+
+    - name: Wait for backend port
+      wait_for:
+        host: 127.0.0.1
+        port: 8000
+        timeout: 60
+
+    - name: Verify backend health endpoint
+      uri:
+        url: http://127.0.0.1:8000/health
+        method: GET
+        status_code: 200
+      register: backend_health
+      retries: 10
+      delay: 3
+      until: backend_health.json.status == "ok"
