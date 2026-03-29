@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
 
 from .database import Base
 
@@ -67,3 +67,18 @@ class Incident(Base):
     analysis = Column(Text)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     is_active = Column(Boolean, default=True)
+
+
+class ServiceActionJob(Base):
+    __tablename__ = "service_action_jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    service_id = Column(Integer, ForeignKey("services.id"), nullable=False)
+    action = Column(String(20), nullable=False)
+    status = Column(String(20), nullable=False, default="pending")
+    requested_by = Column(String(100), default="portal")
+    result_detail = Column(Text)
+    error_detail = Column(Text)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    started_at = Column(DateTime)
+    completed_at = Column(DateTime)

@@ -5,3 +5,4 @@ sqlalchemy==2.0.36
 psycopg2-binary==2.9.10
 alembic==1.14.0
 docker==7.1.0
+httpx==0.28.1

@@ -1,11 +1,9 @@
 import json
 import os
-import urllib.error
-import urllib.request
 from datetime import datetime
 from typing import Any, Optional
 
-import docker
+import httpx
 from fastapi import Depends, FastAPI, HTTPException, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -15,6 +13,7 @@ from sqlalchemy.orm import Session
 from .database import get_db
 from .models import Incident as DBIncident
 from .models import Project as DBProject
+from .models import ServiceActionJob as DBServiceActionJob
 from .models import Service as DBService
 from .models import Skill as DBSkill
 
@@ -305,11 +304,26 @@ class ServiceActionRequest(BaseModel):
 
 
 class ServiceActionResponse(BaseModel):
+    job_id: int
     service_id: int
     service_name: str
     action: str
     status: str
     detail: str
+
+
+class ServiceActionJobRead(BaseModel):
+    id: int
+    service_id: int
+    action: str
+    status: str
+    requested_by: Optional[str] = None
+    result_detail: Optional[str] = None
+    error_detail: Optional[str] = None
+    created_at: datetime
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    model_config = ConfigDict(from_attributes=True)
 
 
 class IncidentBase(BaseModel):
@@ -541,11 +555,11 @@ def record_incident_entry(
 
 def check_http_target(url: str) -> tuple[bool, str]:
     try:
-        with urllib.request.urlopen(url, timeout=2) as response:
-            return True, f"http {response.status}"
-    except urllib.error.HTTPError as exc:
-        return False, f"http {exc.code}"
-    except Exception as exc:  # pragma: no cover
+        response = httpx.get(url, timeout=2.0, follow_redirects=True)
+        if response.status_code < 400:
+            return True, f"http {response.status_code}"
+        return False, f"http {response.status_code}"
+    except httpx.HTTPError as exc:  # pragma: no cover
         return False, str(exc)
 
 
@@ -577,14 +591,47 @@ def compute_overview(db: Session) -> OverviewResponse:
     except Exception:
         database_status = "error"
 
-    backend_ok, _ = check_http_target("http://127.0.0.1:8000/health")
-    frontend_ok, _ = check_http_target("http://frontend/")
-    nginx_ok, _ = check_http_target("http://nginx/health")
-
     services = [
         build_service_overview(service)
         for service in db.query(DBService).filter(DBService.is_active.is_(True)).all()
     ]
+    service_states = {service.name: service for service in services}
+    backend_ok = service_states.get("backend", ServiceOverview(
+        id=0,
+        name="backend",
+        service_type="api",
+        environment=APP_ENVIRONMENT,
+        status="unknown",
+        url=None,
+        health_endpoint=None,
+        owner=None,
+        healthy=False,
+        detail="service not registered",
+    )).healthy
+    frontend_ok = service_states.get("frontend", ServiceOverview(
+        id=0,
+        name="frontend",
+        service_type="web-ui",
+        environment=APP_ENVIRONMENT,
+        status="unknown",
+        url=None,
+        health_endpoint=None,
+        owner=None,
+        healthy=False,
+        detail="service not registered",
+    )).healthy
+    nginx_ok = service_states.get("nginx", ServiceOverview(
+        id=0,
+        name="nginx",
+        service_type="reverse-proxy",
+        environment=APP_ENVIRONMENT,
+        status="unknown",
+        url=None,
+        health_endpoint=None,
+        owner=None,
+        healthy=False,
+        detail="service not registered",
+    )).healthy
 
     return OverviewResponse(
         backend_status="ok" if backend_ok else "error",
@@ -762,7 +809,7 @@ def build_incident_analysis(
     )
 
 
-def run_service_action(db: Session, service: DBService, action: str) -> ServiceActionResponse:
+def queue_service_action(db: Session, service: DBService, action: str) -> ServiceActionResponse:
     policy = SERVICE_ACTION_POLICIES.get(service.name)
     if not policy:
         raise HTTPException(
@@ -781,99 +828,65 @@ def run_service_action(db: Session, service: DBService, action: str) -> ServiceA
         )
 
     runtime_target = service.runtime_target or policy["runtime_target"]
-    client = docker.from_env()
-    try:
-        container = client.containers.get(runtime_target)
-        if action == "restart":
-            container.restart(timeout=10)
-            service.status = "running"
-        elif action == "start":
-            container.start()
-            service.status = "running"
-        elif action == "stop":
-            container.stop(timeout=10)
-            service.status = "stopped"
+    existing_job = (
+        db.query(DBServiceActionJob)
+        .filter(
+            DBServiceActionJob.service_id == service.id,
+            DBServiceActionJob.action == action,
+            DBServiceActionJob.status.in_(("pending", "running")),
+        )
+        .order_by(DBServiceActionJob.id.desc())
+        .first()
+    )
+    if existing_job:
+        return ServiceActionResponse(
+            job_id=existing_job.id,
+            service_id=service.id,
+            service_name=service.name,
+            action=action,
+            status=existing_job.status,
+            detail="An equivalent service action is already queued or running.",
+        )
 
-        overview_snapshot = compute_overview(db).model_dump()
-        record_incident_entry(
-            db,
-            title=f"{service.name} {action} requested from portal",
-            affected_service_id=service.id,
-            severity="low",
-            summary=f"Portal executed a {action} action for {service.name}.",
-            symptoms=f"Operator requested {action} from the service catalog.",
-            recent_changes=f"Service action executed for runtime target {runtime_target}.",
-            status="resolved",
-            source="service-action",
-            event_type=f"service_{action}",
-            overview_snapshot=overview_snapshot,
-            analysis={
-                "action": action,
-                "runtime_target": runtime_target,
-                "control_mode": policy.get("control_mode"),
-                "control_plane": policy.get("control_plane", False),
-                "result": "success",
-            },
-        )
-    except docker.errors.NotFound as exc:
-        record_incident_entry(
-            db,
-            title=f"{service.name} {action} failed",
-            affected_service_id=service.id,
-            severity="high",
-            summary=f"Portal could not find container '{runtime_target}' for {service.name}.",
-            symptoms="Docker reported that the target container was missing.",
-            recent_changes=f"Service action attempted for runtime target {runtime_target}.",
-            status="open",
-            source="service-action",
-            event_type=f"service_{action}_failed",
-            overview_snapshot=compute_overview(db).model_dump(),
-            analysis={
-                "action": action,
-                "runtime_target": runtime_target,
-                "control_mode": policy.get("control_mode"),
-                "control_plane": policy.get("control_plane", False),
-                "result": "container-not-found",
-            },
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Service action failed: container '{runtime_target}' was not found",
-        ) from exc
-    except docker.errors.DockerException as exc:
-        record_incident_entry(
-            db,
-            title=f"{service.name} {action} failed",
-            affected_service_id=service.id,
-            severity="high",
-            summary=f"Portal could not execute {action} for {service.name}.",
-            symptoms=str(exc),
-            recent_changes=f"Service action attempted for runtime target {runtime_target}.",
-            status="open",
-            source="service-action",
-            event_type=f"service_{action}_failed",
-            overview_snapshot=compute_overview(db).model_dump(),
-            analysis={
-                "action": action,
-                "runtime_target": runtime_target,
-                "control_mode": policy.get("control_mode"),
-                "control_plane": policy.get("control_plane", False),
-                "result": "docker-error",
-            },
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Service action failed: {exc}",
-        ) from exc
-    finally:
-        client.close()
+    job = DBServiceActionJob(
+        service_id=service.id,
+        action=action,
+        status="pending",
+        requested_by="portal",
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+
+    record_incident_entry(
+        db,
+        title=f"{service.name} {action} requested from portal",
+        affected_service_id=service.id,
+        severity="low",
+        summary=f"Portal queued a {action} action for {service.name}.",
+        symptoms="Operator requested a service action from the catalog.",
+        recent_changes=f"Queued for runtime target {runtime_target}.",
+        status="investigating",
+        source="service-action",
+        event_type=f"service_{action}_requested",
+        overview_snapshot=compute_overview(db).model_dump(),
+        analysis={
+            "job_id": job.id,
+            "action": action,
+            "runtime_target": runtime_target,
+            "control_mode": policy.get("control_mode"),
+            "control_plane": policy.get("control_plane", False),
+            "result": "queued",
+        },
+    )
 
     return ServiceActionResponse(
+        job_id=job.id,
         service_id=service.id,
         service_name=service.name,
         action=action,
-        status="ok",
-        detail=f"{action} executed for container '{runtime_target}'",
+        status="queued",
+        detail=f"{action} queued for runtime target '{runtime_target}'",
     )
 
 
@@ -1070,7 +1083,13 @@ def service_action(
     )
     if not service:
         raise HTTPException(status_code=404, detail="Service not found")
-    return run_service_action(db, service, payload.action)
+    return queue_service_action(db, service, payload.action)
+
+
+@app.get("/api/service-action-jobs", response_model=list[ServiceActionJobRead])
+def get_service_action_jobs(db: Session = Depends(get_db)) -> list[ServiceActionJobRead]:
+    jobs = db.query(DBServiceActionJob).order_by(DBServiceActionJob.id.desc()).all()
+    return [ServiceActionJobRead.model_validate(job) for job in jobs]
 
 
 @app.get("/api/incidents", response_model=list[IncidentRead])

@@ -30,6 +30,7 @@ This repository is a VM-based DevOps pet project with:
 - The deploy workflow executes Ansible locally on the VM through a generated local inventory and is triggered manually.
 - `BECOME_PASSWORD` is the current GitHub secret required for deploy.
 - Production app services are pulled from GHCR; dev still builds from source locally.
+- Prod runtime files are rendered into `/opt/devops-platform`; prod should not depend on an app git checkout on the server.
 - CI runs on every push and pull request, including `feat/*` branches.
 - Deploy does not run from feature branches.
 
@@ -45,6 +46,7 @@ This repository is a VM-based DevOps pet project with:
 - Keep Postgres data persistent across deploys; do not remove the named volume in normal deploys.
 - Keep the build metadata footer aligned with the actual deploy tag, build id, and pinned component versions.
 - Keep the monitor-worker stoppable/startable without making the control plane inaccessible.
+- Keep the API limited to recording service-action intent; async workers should execute Docker actions.
 - Treat service actions and monitor-worker sweeps as reusable operational history for the incident assistant.
 
 ## Be Careful About
