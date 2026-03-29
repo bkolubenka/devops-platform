@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install validation dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ansible
+
+      - name: Validate backend syntax
+        run: python -m py_compile app/backend/main.py
+
+      - name: Validate Ansible playbook syntax
+        run: |
+          ANSIBLE_LOCAL_TEMP=/tmp/.ansible/tmp \
+          ansible-playbook --syntax-check infra/ansible/playbook.yml -i infra/ansible/inventory.ini
