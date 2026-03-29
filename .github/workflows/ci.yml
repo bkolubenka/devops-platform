@@ -29,3 +29,48 @@ jobs:
         run: |
           ANSIBLE_LOCAL_TEMP=/tmp/.ansible/tmp \
           ansible-playbook --syntax-check infra/ansible/playbook.yml -i infra/ansible/inventory.ini
+
+      - name: Build and start dev stack
+        run: docker compose -f docker-compose.dev.yaml up -d --build
+
+      - name: Run container smoke tests
+        run: |
+          python - <<'PY'
+          import json
+          import time
+          import urllib.request
+
+          checks = [
+              ("http://127.0.0.1/health", {"status": "ok"}),
+              ("http://127.0.0.1/api/health", {"status": "ok"}),
+              ("http://127.0.0.1/api/overview", None),
+              ("http://127.0.0.1/api/services", None),
+          ]
+
+          def fetch_json(url: str):
+              with urllib.request.urlopen(url, timeout=5) as response:
+                  return json.load(response)
+
+          deadline = time.time() + 120
+          while True:
+              try:
+                  results = {}
+                  for url, expected in checks:
+                      payload = fetch_json(url)
+                      if expected is not None:
+                          for key, value in expected.items():
+                              assert payload.get(key) == value, (url, payload)
+                      results[url] = payload
+
+                  assert "services" in results["http://127.0.0.1/api/overview"]
+                  assert isinstance(results["http://127.0.0.1/api/services"], list)
+                  break
+              except Exception:
+                  if time.time() >= deadline:
+                      raise
+                  time.sleep(5)
+          PY
+
+      - name: Stop dev stack
+        if: always()
+        run: docker compose -f docker-compose.dev.yaml down -v
