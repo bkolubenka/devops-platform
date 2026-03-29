@@ -4,6 +4,7 @@ import urllib.error
 import urllib.request
 from typing import Any, Optional
 
+import docker
 from fastapi import Depends, FastAPI, HTTPException, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -11,6 +12,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from .database import Base, engine, get_db
+from .models import Incident as DBIncident
 from .models import Project as DBProject
 from .models import Service as DBService
 from .models import Skill as DBSkill
@@ -177,6 +179,27 @@ INCIDENT_KEYWORDS: dict[str, tuple[str, ...]] = {
     ),
 }
 
+SERVICE_ACTION_POLICIES: dict[str, dict[str, Any]] = {
+    "frontend": {
+        "control_mode": "restart_only",
+        "runtime_target": "frontend",
+        "allowed_actions": ["restart"],
+        "control_plane": True,
+    },
+    "backend": {
+        "control_mode": "restart_only",
+        "runtime_target": "backend",
+        "allowed_actions": ["restart"],
+        "control_plane": True,
+    },
+    "nginx": {
+        "control_mode": "restart_only",
+        "runtime_target": "nginx",
+        "allowed_actions": ["restart"],
+        "control_plane": True,
+    },
+}
+
 
 def ensure_schema_alignment() -> None:
     """Keep the demo schema aligned without requiring migrations yet."""
@@ -194,6 +217,34 @@ def ensure_schema_alignment() -> None:
                     f"ADD COLUMN IF NOT EXISTS {column_name} {column_definition}"
                 )
             )
+        for column_name, column_definition in [
+            ("runtime_target", "VARCHAR(120)"),
+            ("control_mode", "VARCHAR(50) DEFAULT 'observe'"),
+        ]:
+            connection.execute(
+                text(
+                    f"ALTER TABLE services "
+                    f"ADD COLUMN IF NOT EXISTS {column_name} {column_definition}"
+                )
+            )
+        connection.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS incidents (
+                    id SERIAL PRIMARY KEY,
+                    title VARCHAR(255) NOT NULL,
+                    affected_service_id INTEGER,
+                    severity VARCHAR(50) NOT NULL DEFAULT 'medium',
+                    summary TEXT NOT NULL,
+                    symptoms TEXT NOT NULL,
+                    recent_changes TEXT,
+                    status VARCHAR(50) NOT NULL DEFAULT 'open',
+                    analysis TEXT,
+                    is_active BOOLEAN DEFAULT TRUE
+                )
+                """
+            )
+        )
 
 
 ensure_schema_alignment()
@@ -271,6 +322,46 @@ class ServiceUpdate(ServiceBase):
 
 class ServiceRead(ServiceBase):
     id: int
+    runtime_target: Optional[str] = None
+    control_mode: str = "observe"
+    control_plane: bool = False
+    allowed_actions: list[str] = []
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ServiceActionRequest(BaseModel):
+    action: str = Field(pattern="^(restart|start|stop)$")
+
+
+class ServiceActionResponse(BaseModel):
+    service_id: int
+    service_name: str
+    action: str
+    status: str
+    detail: str
+
+
+class IncidentBase(BaseModel):
+    title: str = Field(min_length=3, max_length=255)
+    affected_service_id: int
+    severity: str = Field(pattern="^(low|medium|high|critical)$")
+    summary: str = Field(min_length=5)
+    symptoms: str = Field(min_length=5)
+    recent_changes: Optional[str] = None
+    status: str = Field(default="open", pattern="^(open|investigating|resolved)$")
+
+
+class IncidentCreate(IncidentBase):
+    pass
+
+
+class IncidentUpdate(IncidentBase):
+    pass
+
+
+class IncidentRead(IncidentBase):
+    id: int
+    analysis: Optional[dict[str, Any]] = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -367,7 +458,44 @@ def serialize_project(project: DBProject) -> ProjectRead:
 
 
 def serialize_service(service: DBService) -> ServiceRead:
-    return ServiceRead.model_validate(service)
+    policy = SERVICE_ACTION_POLICIES.get(service.name, {})
+    return ServiceRead(
+        id=service.id,
+        name=service.name,
+        service_type=service.service_type,
+        description=service.description,
+        url=service.url,
+        port=service.port,
+        health_endpoint=service.health_endpoint,
+        environment=service.environment,
+        status=service.status,
+        owner=service.owner,
+        runtime_target=service.runtime_target,
+        control_mode=service.control_mode or policy.get("control_mode", "observe"),
+        control_plane=policy.get("control_plane", False),
+        allowed_actions=policy.get("allowed_actions", []),
+    )
+
+
+def serialize_incident(incident: DBIncident) -> IncidentRead:
+    parsed_analysis = None
+    if incident.analysis:
+        try:
+            parsed_analysis = json.loads(incident.analysis)
+        except json.JSONDecodeError:
+            parsed_analysis = None
+
+    return IncidentRead(
+        id=incident.id,
+        title=incident.title,
+        affected_service_id=incident.affected_service_id,
+        severity=incident.severity,
+        summary=incident.summary,
+        symptoms=incident.symptoms,
+        recent_changes=incident.recent_changes,
+        status=incident.status,
+        analysis=parsed_analysis,
+    )
 
 
 def check_http_target(url: str) -> tuple[bool, str]:
@@ -568,6 +696,55 @@ def build_incident_analysis(
     )
 
 
+def run_service_action(service: DBService, action: str) -> ServiceActionResponse:
+    policy = SERVICE_ACTION_POLICIES.get(service.name)
+    if not policy:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This service is observable only and cannot be controlled from the portal.",
+        )
+
+    allowed_actions = policy["allowed_actions"]
+    if action not in allowed_actions:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Action '{action}' is not allowed for service '{service.name}'. "
+                f"Allowed actions: {', '.join(allowed_actions)}."
+            ),
+        )
+
+    runtime_target = service.runtime_target or policy["runtime_target"]
+    try:
+        client = docker.from_env()
+        container = client.containers.get(runtime_target)
+        if action == "restart":
+            container.restart(timeout=10)
+        elif action == "start":
+            container.start()
+        elif action == "stop":
+            container.stop(timeout=10)
+        client.close()
+    except docker.errors.NotFound as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Service action failed: container '{runtime_target}' was not found",
+        ) from exc
+    except docker.errors.DockerException as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Service action failed: {exc}",
+        ) from exc
+
+    return ServiceActionResponse(
+        service_id=service.id,
+        service_name=service.name,
+        action=action,
+        status="ok",
+        detail=f"{action} executed for container '{runtime_target}'",
+    )
+
+
 def initialize_sample_data(db: Session) -> None:
     if db.query(DBProject).count() == 0:
         project_records = [
@@ -624,6 +801,8 @@ def initialize_sample_data(db: Session) -> None:
                 environment="dev",
                 status="running",
                 owner="Frontend",
+                runtime_target="frontend",
+                control_mode="restart_only",
             ),
             DBService(
                 name="backend",
@@ -634,6 +813,8 @@ def initialize_sample_data(db: Session) -> None:
                 environment="dev",
                 status="running",
                 owner="Platform",
+                runtime_target="backend",
+                control_mode="restart_only",
             ),
             DBService(
                 name="nginx",
@@ -644,9 +825,32 @@ def initialize_sample_data(db: Session) -> None:
                 environment="dev",
                 status="running",
                 owner="Platform",
+                runtime_target="nginx",
+                control_mode="restart_only",
             ),
         ]
         db.add_all(service_records)
+
+    if db.query(DBIncident).count() == 0:
+        backend_service = db.query(DBService).filter(DBService.name == "backend").first()
+        if backend_service:
+            db.add(
+                DBIncident(
+                    title="Sample API incident",
+                    affected_service_id=backend_service.id,
+                    severity="medium",
+                    summary="API health degraded after a recent backend change.",
+                    symptoms="Users report slow responses and occasional 502 errors through nginx.",
+                    recent_changes="Recent backend deploy with API changes.",
+                    status="open",
+                )
+            )
+
+    for service in db.query(DBService).all():
+        policy = SERVICE_ACTION_POLICIES.get(service.name)
+        if policy:
+            service.runtime_target = policy["runtime_target"]
+            service.control_mode = policy["control_mode"]
 
     db.commit()
 
@@ -842,6 +1046,105 @@ def delete_service(service_id: int, db: Session = Depends(get_db)) -> Response:
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@app.post("/api/services/{service_id}/actions", response_model=ServiceActionResponse)
+def service_action(
+    service_id: int, payload: ServiceActionRequest, db: Session = Depends(get_db)
+) -> ServiceActionResponse:
+    service = (
+        db.query(DBService)
+        .filter(DBService.id == service_id, DBService.is_active.is_(True))
+        .first()
+    )
+    if not service:
+        raise HTTPException(status_code=404, detail="Service not found")
+    return run_service_action(service, payload.action)
+
+
+@app.get("/api/incidents", response_model=list[IncidentRead])
+def get_incidents(db: Session = Depends(get_db)) -> list[IncidentRead]:
+    incidents = (
+        db.query(DBIncident)
+        .filter(DBIncident.is_active.is_(True))
+        .order_by(DBIncident.id.desc())
+        .all()
+    )
+    return [serialize_incident(incident) for incident in incidents]
+
+
+@app.get("/api/incidents/{incident_id}", response_model=IncidentRead)
+def get_incident(incident_id: int, db: Session = Depends(get_db)) -> IncidentRead:
+    incident = (
+        db.query(DBIncident)
+        .filter(DBIncident.id == incident_id, DBIncident.is_active.is_(True))
+        .first()
+    )
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    return serialize_incident(incident)
+
+
+@app.post("/api/incidents", response_model=IncidentRead, status_code=status.HTTP_201_CREATED)
+def create_incident(
+    payload: IncidentCreate, db: Session = Depends(get_db)
+) -> IncidentRead:
+    service = (
+        db.query(DBService)
+        .filter(DBService.id == payload.affected_service_id, DBService.is_active.is_(True))
+        .first()
+    )
+    if not service:
+        raise HTTPException(status_code=404, detail="Affected service not found")
+
+    incident = DBIncident(**payload.model_dump())
+    db.add(incident)
+    db.commit()
+    db.refresh(incident)
+    return serialize_incident(incident)
+
+
+@app.put("/api/incidents/{incident_id}", response_model=IncidentRead)
+def update_incident(
+    incident_id: int, payload: IncidentUpdate, db: Session = Depends(get_db)
+) -> IncidentRead:
+    incident = (
+        db.query(DBIncident)
+        .filter(DBIncident.id == incident_id, DBIncident.is_active.is_(True))
+        .first()
+    )
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+
+    service = (
+        db.query(DBService)
+        .filter(DBService.id == payload.affected_service_id, DBService.is_active.is_(True))
+        .first()
+    )
+    if not service:
+        raise HTTPException(status_code=404, detail="Affected service not found")
+
+    for field, value in payload.model_dump().items():
+        setattr(incident, field, value)
+
+    db.commit()
+    db.refresh(incident)
+    return serialize_incident(incident)
+
+
+@app.delete("/api/incidents/{incident_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_incident(incident_id: int, db: Session = Depends(get_db)) -> Response:
+    incident = (
+        db.query(DBIncident)
+        .filter(DBIncident.id == incident_id, DBIncident.is_active.is_(True))
+        .first()
+    )
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+
+    incident.is_active = False
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @app.post(
     "/api/ai/incidents/analyze",
     response_model=IncidentAnalysisResponse,
@@ -850,7 +1153,24 @@ def delete_service(service_id: int, db: Session = Depends(get_db)) -> Response:
 def analyze_incident(
     payload: IncidentRequest, db: Session = Depends(get_db)
 ) -> IncidentAnalysisResponse:
-    return build_incident_analysis(db, payload)
+    analysis = build_incident_analysis(db, payload)
+
+    incident = (
+        db.query(DBIncident)
+        .filter(
+            DBIncident.affected_service_id == analysis.service_context.id,
+            DBIncident.summary == payload.summary,
+            DBIncident.symptoms == payload.symptoms,
+            DBIncident.is_active.is_(True),
+        )
+        .order_by(DBIncident.id.desc())
+        .first()
+    )
+    if incident:
+        incident.analysis = json.dumps(analysis.model_dump())
+        db.commit()
+
+    return analysis
 
 
 @app.post("/api/ai/generate-text", response_model=TextGenerationResponse)

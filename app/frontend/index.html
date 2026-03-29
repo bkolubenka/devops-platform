@@ -365,7 +365,8 @@
           <a href="#" class="nav-link active" data-section="home">Overview</a>
           <a href="#" class="nav-link" data-section="portfolio">Projects</a>
           <a href="#" class="nav-link" data-section="services">Services</a>
-          <a href="#" class="nav-link" data-section="ai">AI Demo</a>
+          <a href="#" class="nav-link" data-section="incidents">Incidents</a>
+          <a href="#" class="nav-link" data-section="ai">Incident Assistant</a>
         </div>
       </div>
     </nav>
@@ -511,6 +512,53 @@
           </div>
         </section>
 
+        <section id="incidents" class="section">
+          <p class="eyebrow">Incident Log</p>
+          <h1>Incidents</h1>
+          <p>Capture operational incidents, keep status visible, and reuse them directly inside the assistant.</p>
+
+          <div class="section-layout">
+            <section class="panel">
+              <p class="eyebrow">Editor</p>
+              <h2 id="incident-form-title">Add Incident</h2>
+              <form id="incident-form">
+                <input type="text" id="incident-title" placeholder="Incident title" required />
+                <div class="two-up">
+                  <select id="incident-service-editor" required>
+                    <option value="">Select affected service</option>
+                  </select>
+                  <select id="incident-status">
+                    <option value="open" selected>Open</option>
+                    <option value="investigating">Investigating</option>
+                    <option value="resolved">Resolved</option>
+                  </select>
+                </div>
+                <div class="two-up">
+                  <select id="incident-severity-editor" required>
+                    <option value="low">Low</option>
+                    <option value="medium" selected>Medium</option>
+                    <option value="high">High</option>
+                    <option value="critical">Critical</option>
+                  </select>
+                  <input type="text" id="incident-summary-editor" placeholder="Short summary" required />
+                </div>
+                <textarea id="incident-symptoms-editor" placeholder="Observed symptoms" required></textarea>
+                <textarea id="incident-recent-changes-editor" placeholder="Optional recent changes"></textarea>
+                <div class="actions">
+                  <button type="submit" class="btn-primary" id="incident-submit">Create incident</button>
+                  <button type="button" class="btn-secondary" id="incident-reset">Reset</button>
+                </div>
+              </form>
+            </section>
+
+            <section class="panel">
+              <p class="eyebrow">Timeline</p>
+              <h2>Logged Incidents</h2>
+              <div id="incidents-grid" class="grid"></div>
+            </section>
+          </div>
+        </section>
+
         <section id="ai" class="section">
           <p class="eyebrow">AIOps Assistant</p>
           <h1>Incident Response Copilot</h1>
@@ -523,6 +571,9 @@
               <p class="eyebrow">Incident Input</p>
               <h2>Analyze Incident</h2>
               <form id="ai-form">
+                <select id="incident-template">
+                  <option value="">Optional: select logged incident to autofill</option>
+                </select>
                 <div class="two-up">
                   <select id="incident-service" required>
                     <option value="">Select affected service</option>
@@ -571,7 +622,9 @@
       const state = {
         editingProjectId: null,
         editingServiceId: null,
+        editingIncidentId: null,
         services: [],
+        incidents: [],
       };
 
       function setActiveSection(sectionId) {
@@ -650,6 +703,15 @@
         document.getElementById("service-status").value = "running";
       }
 
+      function resetIncidentForm() {
+        state.editingIncidentId = null;
+        document.getElementById("incident-form-title").textContent = "Add Incident";
+        document.getElementById("incident-submit").textContent = "Create incident";
+        document.getElementById("incident-form").reset();
+        document.getElementById("incident-status").value = "open";
+        document.getElementById("incident-severity-editor").value = "medium";
+      }
+
       function fillProjectForm(project) {
         state.editingProjectId = project.id;
         document.getElementById("project-form-title").textContent = "Edit Project";
@@ -680,6 +742,20 @@
         document.getElementById("service-port").value = service.port || "";
         document.getElementById("service-status").value = service.status || "";
         document.getElementById("service-owner").value = service.owner || "";
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+
+      function fillIncidentForm(incident) {
+        state.editingIncidentId = incident.id;
+        document.getElementById("incident-form-title").textContent = "Edit Incident";
+        document.getElementById("incident-submit").textContent = "Save incident";
+        document.getElementById("incident-title").value = incident.title;
+        document.getElementById("incident-service-editor").value = String(incident.affected_service_id);
+        document.getElementById("incident-status").value = incident.status;
+        document.getElementById("incident-severity-editor").value = incident.severity;
+        document.getElementById("incident-summary-editor").value = incident.summary;
+        document.getElementById("incident-symptoms-editor").value = incident.symptoms;
+        document.getElementById("incident-recent-changes-editor").value = incident.recent_changes || "";
         window.scrollTo({ top: 0, behavior: "smooth" });
       }
 
@@ -836,6 +912,9 @@
                     ${service.health_endpoint ? `<span>Health: ${service.health_endpoint}</span>` : ""}
                   </div>
                   <div class="actions" style="margin-top: 14px;">
+                    ${service.allowed_actions && service.allowed_actions.includes("restart")
+                      ? `<button class="btn-primary" data-action="restart-service" data-id="${service.id}">Restart</button>`
+                      : ""}
                     <button class="btn-secondary" data-action="edit-service" data-id="${service.id}">Edit</button>
                     <button class="btn-danger" data-action="delete-service" data-id="${service.id}">Remove</button>
                   </div>
@@ -849,17 +928,70 @@
       }
 
       function renderIncidentServiceOptions() {
-        const select = document.getElementById("incident-service");
-        const currentValue = select.value;
         const options = state.services
           .map(
             (service) =>
               `<option value="${service.id}">${escapeHtml(service.name)} (${escapeHtml(service.service_type)})</option>`
           )
           .join("");
-        select.innerHTML = `<option value="">Select affected service</option>${options}`;
+        ["incident-service", "incident-service-editor"].forEach((id) => {
+          const select = document.getElementById(id);
+          const currentValue = select.value;
+          select.innerHTML = `<option value="">Select affected service</option>${options}`;
+          if (currentValue) {
+            select.value = currentValue;
+          }
+        });
+      }
+
+      function renderIncidentTemplates() {
+        const select = document.getElementById("incident-template");
+        const currentValue = select.value;
+        const options = state.incidents
+          .map(
+            (incident) =>
+              `<option value="${incident.id}">${escapeHtml(incident.title)} (${escapeHtml(incident.status)})</option>`
+          )
+          .join("");
+        select.innerHTML = `<option value="">Optional: select logged incident to autofill</option>${options}`;
         if (currentValue) {
           select.value = currentValue;
+        }
+      }
+
+      async function loadIncidents() {
+        const grid = document.getElementById("incidents-grid");
+        try {
+          const incidents = await apiRequest("/api/incidents");
+          state.incidents = incidents;
+          renderIncidentTemplates();
+          if (incidents.length === 0) {
+            grid.innerHTML = '<div class="empty">No incidents yet. Log the first incident and analyze it from the assistant.</div>';
+            return;
+          }
+
+          grid.innerHTML = incidents
+            .map(
+              (incident) => `
+                <article class="card">
+                  <h3 class="card-title">${escapeHtml(incident.title)}</h3>
+                  <p>${escapeHtml(incident.summary)}</p>
+                  <div class="muted-row">
+                    <span class="${statusClass(incident.severity)}">Severity: ${escapeHtml(incident.severity)}</span>
+                    <span>Status: ${escapeHtml(incident.status)}</span>
+                    <span>Service ID: ${incident.affected_service_id}</span>
+                  </div>
+                  <div class="actions" style="margin-top: 14px;">
+                    <button class="btn-primary" data-action="analyze-incident" data-id="${incident.id}">Analyze</button>
+                    <button class="btn-secondary" data-action="edit-incident" data-id="${incident.id}">Edit</button>
+                    <button class="btn-danger" data-action="delete-incident" data-id="${incident.id}">Remove</button>
+                  </div>
+                </article>
+              `
+            )
+            .join("");
+        } catch (error) {
+          grid.innerHTML = `<div class="empty">Failed to load incidents: ${error.message}</div>`;
         }
       }
 
@@ -926,8 +1058,18 @@
         return apiRequest(`/api/services/${id}`);
       }
 
+      async function getIncident(id) {
+        return apiRequest(`/api/incidents/${id}`);
+      }
+
       async function refreshPortal() {
-        await Promise.all([loadHealth(), loadOverview(), loadProjects(), loadServices()]);
+        await Promise.all([
+          loadHealth(),
+          loadOverview(),
+          loadProjects(),
+          loadServices(),
+          loadIncidents(),
+        ]);
       }
 
       document.querySelectorAll(".nav-link").forEach((link) => {
@@ -939,6 +1081,7 @@
           if (sectionId === "home") await loadOverview();
           if (sectionId === "portfolio") await loadProjects();
           if (sectionId === "services") await loadServices();
+          if (sectionId === "incidents") await loadIncidents();
         });
       });
 
@@ -1001,14 +1144,46 @@
             body: JSON.stringify(payload),
           });
           resetServiceForm();
-          await Promise.all([loadServices(), loadOverview()]);
+          await Promise.all([loadServices(), loadOverview(), loadIncidents()]);
         } catch (error) {
           alert(`Service save failed: ${error.message}`);
         }
       });
 
+      document.getElementById("incident-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+
+        const payload = {
+          title: document.getElementById("incident-title").value.trim(),
+          affected_service_id: Number(document.getElementById("incident-service-editor").value),
+          severity: document.getElementById("incident-severity-editor").value,
+          summary: document.getElementById("incident-summary-editor").value.trim(),
+          symptoms: document.getElementById("incident-symptoms-editor").value.trim(),
+          recent_changes:
+            document.getElementById("incident-recent-changes-editor").value.trim() || null,
+          status: document.getElementById("incident-status").value,
+        };
+
+        const path = state.editingIncidentId
+          ? `/api/incidents/${state.editingIncidentId}`
+          : "/api/incidents";
+        const method = state.editingIncidentId ? "PUT" : "POST";
+
+        try {
+          await apiRequest(path, {
+            method,
+            body: JSON.stringify(payload),
+          });
+          resetIncidentForm();
+          await loadIncidents();
+        } catch (error) {
+          alert(`Incident save failed: ${error.message}`);
+        }
+      });
+
       document.getElementById("project-reset").addEventListener("click", resetProjectForm);
       document.getElementById("service-reset").addEventListener("click", resetServiceForm);
+      document.getElementById("incident-reset").addEventListener("click", resetIncidentForm);
 
       document.getElementById("projects-grid").addEventListener("click", async (event) => {
         const button = event.target.closest("button");
@@ -1057,10 +1232,84 @@
           try {
             await apiRequest(`/api/services/${id}`, { method: "DELETE" });
             if (state.editingServiceId === Number(id)) resetServiceForm();
-            await Promise.all([loadServices(), loadOverview()]);
+            await Promise.all([loadServices(), loadOverview(), loadIncidents()]);
           } catch (error) {
             alert(`Failed to remove service: ${error.message}`);
           }
+        }
+
+        if (button.dataset.action === "restart-service") {
+          if (!window.confirm("Restart this control-plane service?")) return;
+          try {
+            await apiRequest(`/api/services/${id}/actions`, {
+              method: "POST",
+              body: JSON.stringify({ action: "restart" }),
+            });
+            await Promise.all([loadServices(), loadOverview()]);
+          } catch (error) {
+            alert(`Failed to restart service: ${error.message}`);
+          }
+        }
+      });
+
+      function applyIncidentToAssistant(incident) {
+        setActiveSection("ai");
+        document.querySelectorAll(".nav-link").forEach((link) => {
+          link.classList.toggle("active", link.dataset.section === "ai");
+        });
+        document.getElementById("incident-template").value = String(incident.id);
+        document.getElementById("incident-service").value = String(incident.affected_service_id);
+        document.getElementById("incident-severity").value = incident.severity;
+        document.getElementById("incident-summary").value = incident.summary;
+        document.getElementById("incident-symptoms").value = incident.symptoms;
+        document.getElementById("incident-recent-changes").value = incident.recent_changes || "";
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+
+      document.getElementById("incidents-grid").addEventListener("click", async (event) => {
+        const button = event.target.closest("button");
+        if (!button) return;
+        const id = button.dataset.id;
+        if (!id) return;
+
+        if (button.dataset.action === "edit-incident") {
+          try {
+            const incident = await getIncident(id);
+            fillIncidentForm(incident);
+          } catch (error) {
+            alert(`Failed to load incident: ${error.message}`);
+          }
+        }
+
+        if (button.dataset.action === "delete-incident") {
+          if (!window.confirm("Remove this incident from the log?")) return;
+          try {
+            await apiRequest(`/api/incidents/${id}`, { method: "DELETE" });
+            if (state.editingIncidentId === Number(id)) resetIncidentForm();
+            await loadIncidents();
+          } catch (error) {
+            alert(`Failed to remove incident: ${error.message}`);
+          }
+        }
+
+        if (button.dataset.action === "analyze-incident") {
+          try {
+            const incident = await getIncident(id);
+            applyIncidentToAssistant(incident);
+          } catch (error) {
+            alert(`Failed to load incident for analysis: ${error.message}`);
+          }
+        }
+      });
+
+      document.getElementById("incident-template").addEventListener("change", async (event) => {
+        const id = event.target.value;
+        if (!id) return;
+        try {
+          const incident = await getIncident(id);
+          applyIncidentToAssistant(incident);
+        } catch (error) {
+          alert(`Failed to load incident template: ${error.message}`);
         }
       });
 

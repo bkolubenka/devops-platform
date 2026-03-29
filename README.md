@@ -7,7 +7,8 @@ Containerized fullstack pet project deployed to an Ubuntu VM with Ansible, Docke
 - FastAPI backend with portfolio, service catalog, overview, and incident-assistant AI endpoints
 - static frontend served separately from the backend
 - PostgreSQL-backed persistence
-- CRUD management for projects and services
+- CRUD management for projects, services, and incidents
+- service-aware incident assistant with deterministic runbook guidance
 - Nginx reverse proxy on the VM
 - Ansible-based deployment
 - GitHub Actions CI
@@ -80,6 +81,8 @@ infra/
 - `/api/portfolio/projects`
 - `/api/portfolio/skills`
 - `/api/services`
+- `/api/services/{id}/actions`
+- `/api/incidents`
 - `/api/ai/incidents/analyze`
 - `/api/ai/generate-text`
 - `/api/ai/models`
