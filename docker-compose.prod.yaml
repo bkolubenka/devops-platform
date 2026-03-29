@@ -32,6 +32,8 @@ services:
       - BUILD_SHA=${BUILD_SHA:-main}
       - IMAGE_TAG=${IMAGE_TAG:-main}
       - BUILD_DATE=${BUILD_DATE:-unknown}
+      - BUILD_ID=${BUILD_ID:-unknown}
+      - CONTAINER_REGISTRY=ghcr.io/${GHCR_OWNER:-bkolubenka}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:

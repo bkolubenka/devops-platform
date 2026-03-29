@@ -8,6 +8,8 @@ image_tag: "{{ lookup('env', 'DEPLOY_IMAGE_TAG') | default(repo_version, true) }
 app_version: "{{ lookup('env', 'DEPLOY_APP_VERSION') | default('2.1.0', true) }}"
 build_sha: "{{ lookup('env', 'DEPLOY_BUILD_SHA') | default(image_tag, true) }}"
 build_date: "{{ lookup('env', 'DEPLOY_BUILD_DATE') | default('unknown', true) }}"
+build_id: "{{ lookup('env', 'DEPLOY_BUILD_ID') | default('unknown', true) }}"
+container_registry: "{{ lookup('env', 'DEPLOY_CONTAINER_REGISTRY') | default('local-build', true) }}"
 
 # Environment-specific settings
 deploy_env: "{{ lookup('env', 'DEPLOY_ENV') | default('dev') }}"

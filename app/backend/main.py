@@ -23,8 +23,12 @@ APP_VERSION = os.getenv("APP_VERSION", "2.1.0")
 BUILD_SHA = os.getenv("BUILD_SHA", "dev-local")
 IMAGE_TAG = os.getenv("IMAGE_TAG", "dev-local")
 BUILD_DATE = os.getenv("BUILD_DATE", "local")
+BUILD_ID = os.getenv("BUILD_ID", "local-run")
+CONTAINER_REGISTRY = os.getenv("CONTAINER_REGISTRY", "local-build")
 COMPONENT_VERSIONS = {
     "Python": "3.11",
+    "Frontend": APP_VERSION,
+    "Backend": APP_VERSION,
     "FastAPI": "0.115.12",
     "SQLAlchemy": "2.0.36",
     "Alembic": "1.14.0",
@@ -354,6 +358,8 @@ class BuildMetadata(BaseModel):
     build_sha: str
     image_tag: str
     build_date: str
+    build_id: str
+    container_registry: str
     environment: str
     component_versions: dict[str, str]
 
@@ -597,6 +603,8 @@ def compute_overview(db: Session) -> OverviewResponse:
             build_sha=BUILD_SHA,
             image_tag=IMAGE_TAG,
             build_date=BUILD_DATE,
+            build_id=BUILD_ID,
+            container_registry=CONTAINER_REGISTRY,
             environment=APP_ENVIRONMENT,
             component_versions=COMPONENT_VERSIONS,
         ),

@@ -108,6 +108,8 @@
         APP_VERSION: "{{ app_version }}"
         BUILD_SHA: "{{ build_sha }}"
         BUILD_DATE: "{{ build_date }}"
+        BUILD_ID: "{{ build_id }}"
+        CONTAINER_REGISTRY: "{{ container_registry }}"
 
     - name: Start docker compose stack for production
       command: docker-compose -f {{ compose_file }} up -d
@@ -119,6 +121,8 @@
         APP_VERSION: "{{ app_version }}"
         BUILD_SHA: "{{ build_sha }}"
         BUILD_DATE: "{{ build_date }}"
+        BUILD_ID: "{{ build_id }}"
+        CONTAINER_REGISTRY: "{{ container_registry }}"
       when: deploy_env == 'prod'
 
     - name: Wait for nginx port

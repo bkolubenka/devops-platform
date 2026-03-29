@@ -79,6 +79,8 @@ jobs:
           DEPLOY_APP_VERSION: 2.1.0
           DEPLOY_BUILD_SHA: ${{ inputs.image_tag }}
           DEPLOY_BUILD_DATE: ${{ steps.deploy_meta.outputs.build_date }}
+          DEPLOY_BUILD_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+          DEPLOY_CONTAINER_REGISTRY: ghcr.io/${{ github.repository_owner }}
         run: |
           ANSIBLE_LOCAL_TEMP=/tmp/.ansible/tmp \
           ansible-playbook \
