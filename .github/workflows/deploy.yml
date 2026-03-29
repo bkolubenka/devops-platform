@@ -1,6 +1,8 @@
 name: Deploy
 
 on:
+  push:
+    branches: [ main, dev ]
   workflow_dispatch:
 
 jobs:
@@ -33,9 +35,11 @@ jobs:
       - name: Run deploy playbook
         env:
           ANSIBLE_BECOME_PASSWORD: ${{ secrets.BECOME_PASSWORD }}
+          DEPLOY_ENV: ${{ github.ref_name == 'main' && 'prod' || 'dev' }}
         run: |
           ANSIBLE_LOCAL_TEMP=/tmp/.ansible/tmp \
           ansible-playbook \
           -i infra/ansible/inventory.runner.ini \
           infra/ansible/playbook.yml \
-          -e "ansible_become_password=${ANSIBLE_BECOME_PASSWORD}"
+          -e "ansible_become_password=${ANSIBLE_BECOME_PASSWORD}" \
+          -e "deploy_env=${DEPLOY_ENV}"

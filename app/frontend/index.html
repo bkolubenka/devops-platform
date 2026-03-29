@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>DevOps Platform</title>
+    <title>DevOps Platform - Portfolio & AI</title>
     <style>
       :root {
         color-scheme: light;
@@ -14,6 +14,8 @@
         --accent: #c75b12;
         --accent-soft: #ffd9bf;
         --line: rgba(31, 41, 55, 0.12);
+        --success: #10b981;
+        --warning: #f59e0b;
       }
 
       * {
@@ -30,8 +32,46 @@
           linear-gradient(135deg, var(--bg), #f0f6ff 55%, #fff4ea);
       }
 
+      nav {
+        position: sticky;
+        top: 0;
+        background: rgba(255, 250, 242, 0.95);
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid var(--line);
+        z-index: 100;
+      }
+
+      nav .container {
+        width: min(1200px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 16px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .nav-links {
+        display: flex;
+        gap: 24px;
+      }
+
+      .nav-link {
+        color: var(--ink);
+        text-decoration: none;
+        font-weight: 500;
+        padding: 8px 16px;
+        border-radius: 8px;
+        transition: background-color 0.2s;
+      }
+
+      .nav-link:hover,
+      .nav-link.active {
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+
       main {
-        width: min(920px, calc(100% - 32px));
+        width: min(1200px, calc(100% - 32px));
         margin: 48px auto;
         padding: 32px;
         border: 1px solid var(--line);
@@ -39,6 +79,14 @@
         background: rgba(255, 250, 242, 0.88);
         backdrop-filter: blur(10px);
         box-shadow: 0 24px 60px rgba(31, 41, 55, 0.08);
+      }
+
+      .section {
+        display: none;
+      }
+
+      .section.active {
+        display: block;
       }
 
       .eyebrow {
@@ -50,9 +98,15 @@
       }
 
       h1 {
-        margin: 0;
+        margin: 0 0 16px;
         font-size: clamp(2.5rem, 6vw, 5rem);
         line-height: 0.95;
+      }
+
+      h2 {
+        margin: 32px 0 16px;
+        font-size: 2rem;
+        color: var(--ink);
       }
 
       p {
@@ -69,7 +123,7 @@
 
       @media (min-width: 720px) {
         .grid {
-          grid-template-columns: repeat(3, 1fr);
+          grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
         }
       }
 
@@ -78,6 +132,141 @@
         border-radius: 18px;
         border: 1px solid var(--line);
         background: white;
+        transition: transform 0.2s, box-shadow 0.2s;
+      }
+
+      .card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(31, 41, 55, 0.1);
+      }
+
+      .project-card {
+        height: 100%;
+      }
+
+      .project-title {
+        margin: 0 0 8px;
+        font-size: 1.25rem;
+        font-weight: 600;
+      }
+
+      .project-description {
+        margin: 0 0 12px;
+        color: var(--muted);
+        font-size: 0.95rem;
+        line-height: 1.5;
+      }
+
+      .project-tech {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 12px;
+      }
+
+      .tech-tag {
+        padding: 4px 8px;
+        background: var(--accent-soft);
+        color: var(--accent);
+        border-radius: 12px;
+        font-size: 0.8rem;
+        font-weight: 500;
+      }
+
+      .project-links {
+        display: flex;
+        gap: 12px;
+      }
+
+      .project-link {
+        color: var(--accent);
+        text-decoration: none;
+        font-size: 0.9rem;
+        font-weight: 500;
+      }
+
+      .project-link:hover {
+        text-decoration: underline;
+      }
+
+      .skill-card {
+        text-align: center;
+      }
+
+      .skill-name {
+        margin: 0 0 8px;
+        font-weight: 600;
+      }
+
+      .skill-level {
+        display: flex;
+        justify-content: center;
+        gap: 4px;
+        margin-bottom: 8px;
+      }
+
+      .skill-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--muted);
+      }
+
+      .skill-dot.filled {
+        background: var(--accent);
+      }
+
+      .skill-category {
+        color: var(--muted);
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      .ai-section {
+        max-width: 800px;
+        margin: 0 auto;
+      }
+
+      .ai-input {
+        width: 100%;
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        font-family: inherit;
+        font-size: 1rem;
+        margin-bottom: 16px;
+        resize: vertical;
+      }
+
+      .ai-button {
+        padding: 12px 24px;
+        background: var(--accent);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background-color 0.2s;
+      }
+
+      .ai-button:hover {
+        background: #a84a0f;
+      }
+
+      .ai-button:disabled {
+        background: var(--muted);
+        cursor: not-allowed;
+      }
+
+      .ai-output {
+        margin-top: 24px;
+        padding: 16px;
+        background: white;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        min-height: 100px;
+        white-space: pre-wrap;
       }
 
       .label {
@@ -116,39 +305,139 @@
         font-family: "Courier New", monospace;
         font-size: 0.95em;
       }
+
+      .loading {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        border: 2px solid var(--muted);
+        border-radius: 50%;
+        border-top-color: var(--accent);
+        animation: spin 1s ease-in-out infinite;
+      }
+
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
     </style>
   </head>
   <body>
-    <main>
-      <p class="eyebrow">DevOps Full Cycle Project</p>
-      <h1>Frontend routed through Nginx.</h1>
-      <p>
-        This page is served by the frontend container. API requests are routed through
-        <code>/api</code> to the FastAPI backend.
-      </p>
-
-      <div class="status">
-        <span class="dot"></span>
-        <span id="health-status">Checking backend health...</span>
+    <nav>
+      <div class="container">
+        <h1 style="margin: 0; font-size: 1.5rem; color: var(--accent);">DevOps Platform</h1>
+        <div class="nav-links">
+          <a href="#" class="nav-link active" data-section="home">Home</a>
+          <a href="#" class="nav-link" data-section="portfolio">Portfolio</a>
+          <a href="#" class="nav-link" data-section="ai">AI Demo</a>
+        </div>
       </div>
+    </nav>
 
-      <section class="grid">
-        <article class="card">
-          <p class="label">Frontend</p>
-          <p class="value">Nginx static container</p>
-        </article>
-        <article class="card">
-          <p class="label">Backend</p>
-          <p class="value">FastAPI behind reverse proxy</p>
-        </article>
-        <article class="card">
-          <p class="label">API endpoint</p>
-          <p class="value"><code>/api/health</code></p>
-        </article>
+    <main>
+      <!-- Home Section -->
+      <section id="home" class="section active">
+        <p class="eyebrow">DevOps Full Cycle Project</p>
+        <h1>Platform as Code</h1>
+        <p>
+          A comprehensive DevOps platform featuring portfolio showcase, AI/ML capabilities,
+          containerized deployment, and automated infrastructure management.
+        </p>
+
+        <div class="status">
+          <span class="dot"></span>
+          <span id="health-status">Checking backend health...</span>
+        </div>
+
+        <section class="grid">
+          <article class="card">
+            <p class="label">Frontend</p>
+            <p class="value">Nginx static container</p>
+          </article>
+          <article class="card">
+            <p class="label">Backend</p>
+            <p class="value">FastAPI with portfolio & AI APIs</p>
+          </article>
+          <article class="card">
+            <p class="label">Infrastructure</p>
+            <p class="value">Docker + Ansible automation</p>
+          </article>
+          <article class="card">
+            <p class="label">AI/ML</p>
+            <p class="value">Text generation & ML models</p>
+          </article>
+        </section>
+      </section>
+
+      <!-- Portfolio Section -->
+      <section id="portfolio" class="section">
+        <p class="eyebrow">My Portfolio</p>
+        <h1>Projects & Skills</h1>
+        <p>
+          A showcase of my work in DevOps, software development, and machine learning.
+        </p>
+
+        <h2>Featured Projects</h2>
+        <div id="projects-grid" class="grid">
+          <!-- Projects will be loaded here -->
+        </div>
+
+        <h2>Technical Skills</h2>
+        <div id="skills-grid" class="grid">
+          <!-- Skills will be loaded here -->
+        </div>
+      </section>
+
+      <!-- AI Section -->
+      <section id="ai" class="section">
+        <div class="ai-section">
+          <p class="eyebrow">AI & Machine Learning</p>
+          <h1>Text Generation Demo</h1>
+          <p>
+            Experience AI-powered text generation. Enter a prompt below to see the model in action.
+          </p>
+
+          <form id="ai-form">
+            <textarea
+              id="ai-prompt"
+              class="ai-input"
+              placeholder="Enter your prompt here... (e.g., 'Tell me about DevOps', 'Hello AI assistant')"
+              rows="3"
+            ></textarea>
+            <button type="submit" class="ai-button" id="generate-btn">
+              Generate Text
+            </button>
+          </form>
+
+          <div id="ai-output" class="ai-output" style="display: none;">
+            <!-- AI response will appear here -->
+          </div>
+        </div>
       </section>
     </main>
 
     <script>
+      // Navigation
+      document.querySelectorAll('.nav-link').forEach(link => {
+        link.addEventListener('click', (e) => {
+          e.preventDefault();
+          const sectionId = link.dataset.section;
+
+          // Update active nav link
+          document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+          link.classList.add('active');
+
+          // Show active section
+          document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+          document.getElementById(sectionId).classList.add('active');
+
+          // Load section data if needed
+          if (sectionId === 'portfolio') {
+            loadPortfolio();
+          }
+        });
+      });
+
+      // Health check
       async function loadHealth() {
         const target = document.getElementById("health-status");
 
@@ -161,6 +450,90 @@
         }
       }
 
+      // Portfolio loading
+      async function loadPortfolio() {
+        try {
+          // Load projects
+          const projectsResponse = await fetch('/api/portfolio/projects');
+          const projects = await projectsResponse.json();
+
+          const projectsGrid = document.getElementById('projects-grid');
+          projectsGrid.innerHTML = projects.map(project => `
+            <article class="card project-card">
+              <h3 class="project-title">${project.title}</h3>
+              <p class="project-description">${project.description}</p>
+              <div class="project-tech">
+                ${project.technologies.map(tech => `<span class="tech-tag">${tech}</span>`).join('')}
+              </div>
+              <div class="project-links">
+                ${project.github_url ? `<a href="${project.github_url}" class="project-link" target="_blank">GitHub</a>` : ''}
+                ${project.demo_url ? `<a href="${project.demo_url}" class="project-link" target="_blank">Demo</a>` : ''}
+              </div>
+            </article>
+          `).join('');
+
+          // Load skills
+          const skillsResponse = await fetch('/api/portfolio/skills');
+          const skills = await skillsResponse.json();
+
+          const skillsGrid = document.getElementById('skills-grid');
+          skillsGrid.innerHTML = skills.map(skill => `
+            <article class="card skill-card">
+              <h3 class="skill-name">${skill.name}</h3>
+              <div class="skill-level">
+                ${Array.from({length: 5}, (_, i) =>
+                  `<div class="skill-dot ${i < skill.level ? 'filled' : ''}"></div>`
+                ).join('')}
+              </div>
+              <p class="skill-category">${skill.category}</p>
+            </article>
+          `).join('');
+
+        } catch (error) {
+          console.error('Failed to load portfolio:', error);
+        }
+      }
+
+      // AI text generation
+      document.getElementById('ai-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const prompt = document.getElementById('ai-prompt').value.trim();
+        if (!prompt) return;
+
+        const button = document.getElementById('generate-btn');
+        const output = document.getElementById('ai-output');
+
+        // Show loading state
+        button.disabled = true;
+        button.innerHTML = '<div class="loading"></div> Generating...';
+        output.style.display = 'block';
+        output.textContent = 'Generating response...';
+
+        try {
+          const response = await fetch('/api/ai/generate-text', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              prompt: prompt,
+              max_length: 200
+            })
+          });
+
+          const data = await response.json();
+          output.textContent = data.generated_text;
+        } catch (error) {
+          output.textContent = 'Error: Failed to generate text. Please try again.';
+          console.error('AI generation error:', error);
+        } finally {
+          button.disabled = false;
+          button.textContent = 'Generate Text';
+        }
+      });
+
+      // Initialize
       loadHealth();
     </script>
   </body>

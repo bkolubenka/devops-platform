@@ -6,9 +6,11 @@
     docker_packages:
       - docker.io
       - docker-compose
+      - certbot
+      - python3-certbot-nginx
 
   tasks:
-    - name: Install Docker packages
+    - name: Install required packages
       apt:
         name: "{{ docker_packages }}"
         state: present
@@ -19,10 +21,15 @@
         name: docker
         state: started
         enabled: true
-        
+
     - name: Create app directory
       file:
         path: "{{ app_dir }}"
+        state: directory
+
+    - name: Create SSL directory
+      file:
+        path: "{{ app_dir }}/ssl"
         state: directory
 
     - name: Copy project to server
@@ -41,9 +48,17 @@
       when: "'nginx.service' in ansible_facts.services"
 
     - name: Stop existing docker compose stack
-      command: docker-compose -f {{ compose_file }} down --remove-orphans
+      command: docker-compose -f {{ compose_file }} down --remove-orphans --volumes
       args:
         chdir: "{{ app_dir }}"
+      failed_when: false
+
+    - name: Stop all containers using port 80
+      shell: docker ps -q --filter "publish=80" | xargs -r docker stop
+      failed_when: false
+
+    - name: Remove stopped containers
+      command: docker container prune -f
       failed_when: false
 
     - name: Check whether nginx host port is already in use
@@ -77,3 +92,34 @@
       retries: 10
       delay: 3
       until: backend_health.json.status == "ok"
+
+    # SSL Certificate setup for production
+    - name: Obtain SSL certificate (production only)
+      command: certbot certonly --standalone --agree-tos --email {{ ssl_email }} -d {{ domain_name }}
+      when: deploy_env == 'prod'
+      failed_when: false
+
+    - name: Copy SSL certificates to app directory
+      copy:
+        src: "/etc/letsencrypt/live/{{ domain_name }}/{{ item }}"
+        dest: "{{ app_dir }}/ssl/{{ item }}"
+        remote_src: yes
+      with_items:
+        - fullchain.pem
+        - privkey.pem
+      when: deploy_env == 'prod'
+      failed_when: false
+
+    - name: Restart nginx with SSL
+      command: docker-compose -f {{ compose_file }} restart nginx
+      args:
+        chdir: "{{ app_dir }}"
+      when: deploy_env == 'prod'
+
+    - name: Setup SSL renewal cron job
+      cron:
+        name: "SSL certificate renewal"
+        minute: "0"
+        hour: "12"
+        job: "certbot renew --quiet && docker-compose -f {{ app_dir }}/{{ compose_file }} restart nginx"
+      when: deploy_env == 'prod'

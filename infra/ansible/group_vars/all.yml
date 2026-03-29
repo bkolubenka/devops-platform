@@ -1,7 +1,24 @@
 app_name: devops-platform
 app_base_dir: /home/make/apps
 app_dir: "{{ app_base_dir }}/{{ app_name }}"
-compose_file: docker-compose.dev.yaml
+
+# Environment-specific settings
+deploy_env: "{{ lookup('env', 'DEPLOY_ENV') | default('dev') }}"
+
+# Compose file based on environment
+compose_file: "docker-compose.{{ deploy_env }}.yaml"
+
+# Ports
 backend_internal_port: 8000
 nginx_host_port: 80
-healthcheck_url: http://127.0.0.1/health
+nginx_ssl_port: 443
+
+# Health check
+healthcheck_url: "http://127.0.0.1/health"
+
+# Domain configuration (update with your actual domain)
+domain_name: "yourdomain.com"
+ssl_email: "admin@yourdomain.com"
+
+# Test environment settings
+test_domain: "test.yourdomain.com"

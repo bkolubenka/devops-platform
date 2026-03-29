@@ -1,26 +1,18 @@
 # DevOps Platform
 
-Full-cycle DevOps pet project for deploying a containerized fullstack application to an Ubuntu VM with Infrastructure as Code, reverse proxying, and CI/CD.
+Containerized fullstack pet project deployed to an Ubuntu VM with Ansible, Docker Compose, Nginx, PostgreSQL, and GitHub Actions.
 
-## Overview
+## What This Project Shows
 
-This project demonstrates a practical deployment workflow:
+- FastAPI backend with portfolio and demo AI endpoints
+- static frontend served separately from the backend
+- PostgreSQL-backed persistence
+- Nginx reverse proxy on the VM
+- Ansible-based deployment
+- GitHub Actions CI
+- self-hosted GitHub Actions deploy runner on the VM
 
-- `FastAPI` backend
-- static frontend served in a separate container
-- `Nginx` reverse proxy
-- `Docker` and `docker-compose`
-- `Ansible` for server provisioning and deployment
-- `GitHub Actions` for CI and deployment
-- self-hosted GitHub Actions runner on the VM
-
-Current routing:
-
-- `/` -> frontend
-- `/api/*` -> FastAPI backend
-- `/health` -> backend health endpoint through Nginx
-
-## Architecture
+## Current Architecture
 
 ```text
 GitHub Actions
@@ -31,28 +23,20 @@ Ansible
     ↓
 Docker Compose
     ↓
-Nginx -> Frontend + FastAPI
-```
-
-Runtime flow:
-
-```text
-Browser
-  ↓
-Nginx :80
-  ├─ /        -> frontend container
-  ├─ /api/*   -> backend container
-  └─ /health  -> backend container
+Nginx
+  ├─ /        -> frontend
+  ├─ /api/*   -> FastAPI backend
+  └─ /health  -> backend health check
 ```
 
 ## Tech Stack
 
 - Python 3.11
 - FastAPI
-- Uvicorn
+- SQLAlchemy
+- PostgreSQL
 - Nginx
-- Docker
-- Docker Compose
+- Docker / Docker Compose
 - Ansible
 - GitHub Actions
 
@@ -61,109 +45,80 @@ Nginx :80
 ```text
 app/
   backend/
-    Dockerfile
     main.py
+    database.py
+    models.py
     requirements.txt
+    Dockerfile
   frontend/
     index.html
+    Dockerfile
   nginx/
     default.conf
 
 infra/
   ansible/
-    group_vars/
-      all.yml
+    ansible.cfg
     inventory.ini
     playbook.yml
+    group_vars/
+      all.yml
+  setup-runner.sh
 
-.github/
-  workflows/
-    ci.yml
-    deploy.yml
+.github/workflows/
+  ci.yml
+  deploy.yml
 ```
 
-## Features
+## Application Routes
 
-- Provision Docker and Docker Compose with Ansible
-- Copy project files to the VM and redeploy remotely
-- Build and run backend/frontend containers with Docker Compose
-- Route traffic through Nginx on port `80`
-- Validate deployment with `/health`
-- Run CI checks on GitHub Actions
-- Deploy from GitHub Actions through a self-hosted runner on the VM
+- `/` -> frontend
+- `/health` -> health check through Nginx
+- `/api/health` -> backend health check
+- `/api/portfolio/projects`
+- `/api/portfolio/skills`
+- `/api/ai/generate-text`
+- `/api/ai/models`
 
-## Application Endpoints
+## Local Run
 
-- `GET /` -> frontend page
-- `GET /health` -> `{"status": "ok"}`
-- `GET /api/health` -> `{"status": "ok"}`
+```bash
+docker-compose -f docker-compose.dev.yaml up --build
+```
 
-## Local Deployment With Ansible
+Then open:
 
-Run from the project root:
+- `http://localhost/`
+- `http://localhost/health`
+- `http://localhost/api/portfolio/projects`
+
+## VM Deploy
+
+Manual deploy:
 
 ```bash
 ansible-playbook -i infra/ansible/inventory.ini infra/ansible/playbook.yml --ask-become-pass
 ```
 
-## CI/CD
-
-### CI
-
-The CI workflow validates:
-
-- Python syntax for the backend
-- Ansible playbook syntax
-
-### Deploy
-
-The deploy workflow:
+GitHub Actions deploy:
 
 - runs on a self-hosted runner installed on the VM
-- creates a local Ansible inventory with `ansible_connection=local`
-- executes the deploy playbook directly on the VM
+- executes the Ansible playbook locally on that VM
 
-Required GitHub Actions secret:
+Required GitHub secret:
 
 - `BECOME_PASSWORD`
 
-## Ansible Variables
+## Notes
 
-Main variables are stored in [`infra/ansible/group_vars/all.yml`](infra/ansible/group_vars/all.yml):
+- `docker-compose.dev.yaml` is the active working environment
+- `docker-compose.prod.yaml` is the production-oriented compose file and should be treated as evolving configuration
+- SSL/domain configuration exists in the repo, but should be finalized only when a real domain is ready
 
-- `app_name`
-- `app_base_dir`
-- `app_dir`
-- `compose_file`
-- `backend_internal_port`
-- `nginx_host_port`
-- `healthcheck_url`
+## Next Improvements
 
-## Current Status
-
-Implemented:
-
-- backend container
-- frontend container
-- Nginx reverse proxy
-- Ansible-based deployment
-- health checks
-- self-hosted GitHub Actions deploy
-
-Planned next:
-
-- environment-based app configuration
-- PostgreSQL integration
-- monitoring
-- production hardening
-
-## Resume Value
-
-This project demonstrates hands-on experience with:
-
-- Infrastructure as Code
-- containerized deployments
-- reverse proxy configuration
-- self-hosted CI/CD runners
-- remote service validation
-- practical VM-based DevOps workflows
+- move hardcoded development database credentials to env files
+- add database migrations
+- replace demo AI endpoint with a real model-backed service
+- split Nginx config cleanly for dev vs prod
+- add monitoring and backups
