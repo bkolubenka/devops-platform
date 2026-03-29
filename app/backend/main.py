@@ -12,13 +12,11 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from .database import Base, engine, get_db
+from .database import get_db
 from .models import Incident as DBIncident
 from .models import Project as DBProject
 from .models import Service as DBService
 from .models import Skill as DBSkill
-
-Base.metadata.create_all(bind=engine)
 
 APP_ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 
@@ -206,72 +204,6 @@ SERVICE_ACTION_POLICIES: dict[str, dict[str, Any]] = {
         "control_plane": False,
     },
 }
-
-
-def ensure_schema_alignment() -> None:
-    """Keep the demo schema aligned without requiring migrations yet."""
-    project_columns = [
-        ("category", "VARCHAR(100) DEFAULT 'Platform'"),
-        ("status", "VARCHAR(50) DEFAULT 'active'"),
-        ("owner", "VARCHAR(100)"),
-        ("featured", "BOOLEAN DEFAULT FALSE"),
-    ]
-    with engine.begin() as connection:
-        for column_name, column_definition in project_columns:
-            connection.execute(
-                text(
-                    f"ALTER TABLE projects "
-                    f"ADD COLUMN IF NOT EXISTS {column_name} {column_definition}"
-                )
-            )
-        for column_name, column_definition in [
-            ("runtime_target", "VARCHAR(120)"),
-            ("control_mode", "VARCHAR(50) DEFAULT 'observe'"),
-        ]:
-            connection.execute(
-                text(
-                    f"ALTER TABLE services "
-                    f"ADD COLUMN IF NOT EXISTS {column_name} {column_definition}"
-                )
-            )
-        connection.execute(
-            text(
-                """
-                CREATE TABLE IF NOT EXISTS incidents (
-                    id SERIAL PRIMARY KEY,
-                    title VARCHAR(255) NOT NULL,
-                    affected_service_id INTEGER,
-                    severity VARCHAR(50) NOT NULL DEFAULT 'medium',
-                    summary TEXT NOT NULL,
-                    symptoms TEXT NOT NULL,
-                    recent_changes TEXT,
-                    status VARCHAR(50) NOT NULL DEFAULT 'open',
-                    source VARCHAR(100) DEFAULT 'manual',
-                    event_type VARCHAR(100) DEFAULT 'incident',
-                    overview_snapshot TEXT,
-                    analysis TEXT,
-                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    is_active BOOLEAN DEFAULT TRUE
-                )
-                """
-            )
-        )
-        for column_name, column_definition in [
-            ("source", "VARCHAR(100) DEFAULT 'manual'"),
-            ("event_type", "VARCHAR(100) DEFAULT 'incident'"),
-            ("overview_snapshot", "TEXT"),
-            ("created_at", "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP"),
-        ]:
-            connection.execute(
-                text(
-                    f"ALTER TABLE incidents "
-                    f"ADD COLUMN IF NOT EXISTS {column_name} {column_definition}"
-                )
-            )
-
-
-ensure_schema_alignment()
-
 app = FastAPI(title="DevOps Platform API", version="2.1.0")
 
 app.add_middleware(
@@ -905,146 +837,6 @@ def run_service_action(db: Session, service: DBService, action: str) -> ServiceA
         status="ok",
         detail=f"{action} executed for container '{runtime_target}'",
     )
-
-
-def initialize_sample_data(db: Session) -> None:
-    if db.query(DBProject).count() == 0:
-        project_records = [
-            DBProject(
-                title="DevOps Platform",
-                description=(
-                    "Full-cycle DevOps portal with containerized services, "
-                    "Ansible deployment, GitHub Actions CI/CD, and incident assistance."
-                ),
-                technologies=json.dumps(
-                    ["Python", "FastAPI", "Docker", "Nginx", "Ansible", "GitHub Actions"]
-                ),
-                github_url="https://github.com/bkolubenka/devops-platform",
-                demo_url="http://localhost/",
-                category="Platform",
-                status="running",
-                owner="Meirambek Kydyrov",
-                featured=True,
-            ),
-            DBProject(
-                title="AIOps Incident Assistant",
-                description=(
-                    "Deterministic service-aware assistant that classifies incidents "
-                    "and suggests runbooks using current platform health and service metadata."
-                ),
-                technologies=json.dumps(["FastAPI", "PostgreSQL", "Nginx", "AIOps"]),
-                category="AI/ML",
-                status="running",
-                owner="Meirambek Kydyrov",
-                featured=True,
-            ),
-        ]
-        db.add_all(project_records)
-
-    if db.query(DBSkill).count() == 0:
-        skill_records = [
-            DBSkill(name="Python", level=5, category="Backend"),
-            DBSkill(name="FastAPI", level=4, category="Backend"),
-            DBSkill(name="Docker", level=4, category="DevOps"),
-            DBSkill(name="Ansible", level=4, category="Infrastructure"),
-            DBSkill(name="PostgreSQL", level=3, category="Database"),
-            DBSkill(name="GitHub Actions", level=4, category="CI/CD"),
-        ]
-        db.add_all(skill_records)
-
-    service_records = [
-        DBService(
-            name="frontend",
-            service_type="web-ui",
-            description="Static frontend served behind Nginx.",
-            url="http://frontend/",
-            health_endpoint="http://frontend/",
-            environment="dev",
-            status="running",
-            owner="Frontend",
-            runtime_target="frontend",
-            control_mode="restart_only",
-        ),
-        DBService(
-            name="backend",
-            service_type="api",
-            description="FastAPI application serving overview, CRUD, and incident assistant endpoints.",
-            url="http://backend:8000/",
-            health_endpoint="http://backend:8000/health",
-            environment="dev",
-            status="running",
-            owner="Platform",
-            runtime_target="backend",
-            control_mode="restart_only",
-        ),
-        DBService(
-            name="nginx",
-            service_type="reverse-proxy",
-            description="Ingress container routing frontend and backend traffic.",
-            url="http://nginx/",
-            health_endpoint="http://nginx/health",
-            environment="dev",
-            status="running",
-            owner="Platform",
-            runtime_target="nginx",
-            control_mode="restart_only",
-        ),
-        DBService(
-            name="monitor-worker",
-            service_type="ops-worker",
-            description=(
-                "Minute-based platform monitor that checks service health, records "
-                "operational events, and powers incident autofill."
-            ),
-            url="http://monitor-worker:9000/",
-            health_endpoint="http://monitor-worker:9000/health",
-            environment="dev",
-            status="running",
-            owner="Platform",
-            runtime_target="monitor_worker",
-            control_mode="managed",
-        ),
-    ]
-    existing_service_names = {
-        service.name for service in db.query(DBService).filter(DBService.is_active.is_(True)).all()
-    }
-    for service_record in service_records:
-        if service_record.name not in existing_service_names:
-            db.add(service_record)
-
-    if db.query(DBIncident).count() == 0:
-        backend_service = db.query(DBService).filter(DBService.name == "backend").first()
-        if backend_service:
-            db.add(
-                DBIncident(
-                    title="Sample API incident",
-                    affected_service_id=backend_service.id,
-                    severity="medium",
-                    summary="API health degraded after a recent backend change.",
-                    symptoms="Users report slow responses and occasional 502 errors through nginx.",
-                    recent_changes="Recent backend deploy with API changes.",
-                    status="open",
-                )
-            )
-
-    for service in db.query(DBService).all():
-        policy = SERVICE_ACTION_POLICIES.get(service.name)
-        if policy:
-            service.runtime_target = policy["runtime_target"]
-            service.control_mode = policy["control_mode"]
-            if policy.get("allowed_actions") and service.name == "monitor-worker":
-                service.status = service.status or "running"
-
-    db.commit()
-
-
-@app.on_event("startup")
-async def startup_event() -> None:
-    db = next(get_db())
-    try:
-        initialize_sample_data(db)
-    finally:
-        db.close()
 
 
 @app.get("/health")
