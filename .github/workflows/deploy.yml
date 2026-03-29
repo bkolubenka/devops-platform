@@ -9,7 +9,9 @@ on:
 jobs:
   deploy:
     if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on:
+      - self-hosted
+      - linux
 
     steps:
       - name: Checkout repository
@@ -33,14 +35,7 @@ jobs:
       - name: Add server to known_hosts
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
-
-      - name: Create temporary Ansible inventory
-        run: |
-          cat > infra/ansible/inventory.ci.ini <<EOF
-          [server]
-          target ansible_host=${{ secrets.SSH_HOST }} ansible_user=${{ secrets.SSH_USER }}
-          EOF
+          ssh-keyscan -H vm-1.tail5492ae.ts.net >> ~/.ssh/known_hosts
 
       - name: Run deploy playbook
         env:
@@ -48,6 +43,6 @@ jobs:
         run: |
           ANSIBLE_LOCAL_TEMP=/tmp/.ansible/tmp \
           ansible-playbook \
-          -i infra/ansible/inventory.ci.ini \
+          -i infra/ansible/inventory.ini \
           infra/ansible/playbook.yml \
           -e "ansible_become_password=${ANSIBLE_BECOME_PASSWORD}"
