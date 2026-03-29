@@ -362,8 +362,37 @@
         border-top: 1px solid var(--line);
       }
 
-      .build-footer .grid {
+      .build-summary {
+        cursor: pointer;
+        color: var(--muted);
+        font-size: 0.84rem;
+        line-height: 1.5;
+        letter-spacing: 0.02em;
+        list-style: none;
+      }
+
+      .build-summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .build-summary::before {
+        content: "Show build details";
+        display: inline-block;
+        margin-right: 10px;
+        color: var(--accent);
+        font-weight: 700;
+      }
+
+      details[open] .build-summary::before {
+        content: "Hide build details";
+      }
+
+      .build-details-body {
         margin-top: 14px;
+      }
+
+      .build-details-body .grid {
+        margin-top: 0;
       }
 
       .footer-note {
@@ -632,9 +661,10 @@
 
         <footer class="build-footer">
           <p class="eyebrow">Build Metadata</p>
-          <h2>Deployment Fingerprint</h2>
-          <p>Version, build, and pinned component references for the currently running portal.</p>
-          <div id="build-footer" class="grid"></div>
+          <details id="build-footer-shell">
+            <summary id="build-footer-summary" class="build-summary">Loading deployment fingerprint...</summary>
+            <div id="build-footer" class="build-details-body"></div>
+          </details>
         </footer>
       </main>
     </div>
@@ -809,6 +839,7 @@
         const metrics = document.getElementById("overview-metrics");
         const services = document.getElementById("overview-services");
         const footer = document.getElementById("build-footer");
+        const footerSummary = document.getElementById("build-footer-summary");
 
         try {
           const data = await apiRequest("/api/overview");
@@ -857,24 +888,32 @@
             )
             .join("");
 
+          footerSummary.textContent = `DevOps Platform 2026 | v${data.build.app_version} | tag ${data.build.image_tag} | built ${data.build.build_date} | run ${data.build.build_id} | FE/BE ${data.build.app_version} | DB ${data.build.component_versions.PostgreSQL} | registry ${data.build.container_registry}`;
+
           footer.innerHTML = `
-            <article class="card">
-              <div class="label">Application</div>
-              <p class="card-title">v${escapeHtml(data.build.app_version)}</p>
-              <div class="muted-row">
-                <span>Environment: ${escapeHtml(data.build.environment)}</span>
-                <span>Image tag: ${escapeHtml(data.build.image_tag)}</span>
-              </div>
-              <div class="muted-row">
-                <span>Build id: ${escapeHtml(data.build.build_sha)}</span>
-                <span>Build date: ${escapeHtml(data.build.build_date)}</span>
-              </div>
-            </article>
-            <article class="card">
-              <div class="label">Recommended Components</div>
-              <div class="detail-list">${componentMarkup}</div>
-              <p class="footer-note">These are the pinned versions this stack is intended to run against.</p>
-            </article>
+            <div class="grid">
+              <article class="card">
+                <div class="label">Deployment</div>
+                <p class="card-title">v${escapeHtml(data.build.app_version)}</p>
+                <div class="muted-row">
+                  <span>Environment: ${escapeHtml(data.build.environment)}</span>
+                  <span>Image tag: ${escapeHtml(data.build.image_tag)}</span>
+                </div>
+                <div class="muted-row">
+                  <span>Build SHA: ${escapeHtml(data.build.build_sha)}</span>
+                  <span>Build ID: ${escapeHtml(data.build.build_id)}</span>
+                </div>
+                <div class="muted-row">
+                  <span>Build date: ${escapeHtml(data.build.build_date)}</span>
+                  <span>Registry: ${escapeHtml(data.build.container_registry)}</span>
+                </div>
+              </article>
+              <article class="card">
+                <div class="label">Recommended Components</div>
+                <div class="detail-list">${componentMarkup}</div>
+                <p class="footer-note">These are the pinned versions this stack is intended to run against.</p>
+              </article>
+            </div>
           `;
 
           if (data.services.length === 0) {
@@ -905,6 +944,7 @@
         } catch (error) {
           metrics.innerHTML = `<div class="empty">Failed to load overview: ${error.message}</div>`;
           services.innerHTML = "";
+          footerSummary.textContent = `Build metadata unavailable: ${error.message}`;
           footer.innerHTML = "";
         }
       }
