@@ -72,6 +72,26 @@
         msg: "Port {{ nginx_host_port }} is already in use on the VM. Free it before deploy or change the nginx mapping. Details: {{ port_80_check.stdout | default('unknown process') }}"
       when: port_80_check.stdout is search(':' ~ nginx_host_port)
 
+    - name: Require real production domain settings
+      fail:
+        msg: "Set domain_name and ssl_email to real production values before deploying prod."
+      when: deploy_env == 'prod' and (domain_name == 'yourdomain.com' or ssl_email == 'admin@yourdomain.com')
+
+    # SSL Certificate setup for production
+    - name: Obtain SSL certificate (production only)
+      command: certbot certonly --standalone --agree-tos --email {{ ssl_email }} -d {{ domain_name }}
+      when: deploy_env == 'prod'
+
+    - name: Copy SSL certificates to app directory
+      copy:
+        src: "/etc/letsencrypt/live/{{ domain_name }}/{{ item }}"
+        dest: "{{ app_dir }}/ssl/{{ item }}"
+        remote_src: yes
+      with_items:
+        - fullchain.pem
+        - privkey.pem
+      when: deploy_env == 'prod'
+
     - name: Run docker compose
       command: docker-compose -f {{ compose_file }} up -d --build
       args:
@@ -92,29 +112,6 @@
       retries: 10
       delay: 3
       until: backend_health.json.status == "ok"
-
-    # SSL Certificate setup for production
-    - name: Obtain SSL certificate (production only)
-      command: certbot certonly --standalone --agree-tos --email {{ ssl_email }} -d {{ domain_name }}
-      when: deploy_env == 'prod'
-      failed_when: false
-
-    - name: Copy SSL certificates to app directory
-      copy:
-        src: "/etc/letsencrypt/live/{{ domain_name }}/{{ item }}"
-        dest: "{{ app_dir }}/ssl/{{ item }}"
-        remote_src: yes
-      with_items:
-        - fullchain.pem
-        - privkey.pem
-      when: deploy_env == 'prod'
-      failed_when: false
-
-    - name: Restart nginx with SSL
-      command: docker-compose -f {{ compose_file }} restart nginx
-      args:
-        chdir: "{{ app_dir }}"
-      when: deploy_env == 'prod'
 
     - name: Setup SSL renewal cron job
       cron:

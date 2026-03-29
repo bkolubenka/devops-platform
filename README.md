@@ -63,7 +63,6 @@ infra/
     playbook.yml
     group_vars/
       all.yml
-  setup-runner.sh
 
 .github/workflows/
   ci.yml
@@ -104,6 +103,12 @@ GitHub Actions deploy:
 
 - runs on a self-hosted runner installed on the VM
 - executes the Ansible playbook locally on that VM
+- is triggered manually with `workflow_dispatch`
+
+Branch policy:
+
+- CI runs on every push and pull request, including `feat/*` branches
+- deploy does not run on feature branches
 
 Required GitHub secret:
 

@@ -1,6 +1,7 @@
 #!/bin/bash
-# Setup script for GitHub Actions self-hosted runner with proper permissions
-# Run this on your VM as root or with sudo
+# Legacy helper for early runner bootstrap.
+# Current deploy uses a self-hosted runner on the VM and manual GitHub Actions dispatch.
+# Run this on the VM as root or with sudo if you still need the old bootstrap flow.
 
 set -e
 

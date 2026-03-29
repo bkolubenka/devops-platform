@@ -24,8 +24,10 @@ This repository is a VM-based DevOps pet project with:
 
 - Deployments are driven by `infra/ansible/playbook.yml`.
 - GitHub Actions deploy runs on a self-hosted Linux runner installed on the VM.
-- The deploy workflow executes Ansible locally on the VM through a generated local inventory.
+- The deploy workflow executes Ansible locally on the VM through a generated local inventory and is triggered manually.
 - `BECOME_PASSWORD` is the current GitHub secret required for deploy.
+- CI runs on every push and pull request, including `feat/*` branches.
+- Deploy does not run from feature branches.
 
 ## Working Rules
 

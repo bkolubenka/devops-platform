@@ -1,9 +1,16 @@
 name: Deploy
 
 on:
-  push:
-    branches: [ main, dev ]
   workflow_dispatch:
+    inputs:
+      deploy_env:
+        description: "Compose environment to deploy"
+        required: true
+        default: dev
+        type: choice
+        options:
+          - dev
+          - prod
 
 jobs:
   deploy:
@@ -35,7 +42,7 @@ jobs:
       - name: Run deploy playbook
         env:
           ANSIBLE_BECOME_PASSWORD: ${{ secrets.BECOME_PASSWORD }}
-          DEPLOY_ENV: ${{ github.ref_name == 'main' && 'prod' || 'dev' }}
+          DEPLOY_ENV: ${{ inputs.deploy_env }}
         run: |
           ANSIBLE_LOCAL_TEMP=/tmp/.ansible/tmp \
           ansible-playbook \
