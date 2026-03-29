@@ -4,11 +4,11 @@ Containerized fullstack pet project deployed to an Ubuntu VM with Ansible, Docke
 
 ## What This Project Shows
 
-- FastAPI backend with portfolio, service catalog, overview, operational log, and incident-assistant AI endpoints
+- FastAPI backend with portfolio, service catalog, overview, incident log, and incident-assistant AI endpoints
 - static frontend served separately from the backend
 - PostgreSQL-backed persistence
 - Alembic migrations for schema and release data changes
-- CRUD management for projects, services, incidents, and operational log entries
+- CRUD management for projects, services, and incidents, with `/api/incidents` also serving as the operational log for monitor-worker sweeps and service-action events
 - service-aware incident assistant with deterministic runbook guidance and incident autofill
 - monitor-worker demo service that records platform health summaries and state transitions
 - worker-mediated service actions so the API queues intent and a separate runner executes it
@@ -36,7 +36,7 @@ Nginx
   └─ /health  -> backend health check
 ```
 
-- `monitor-worker` is a separate demo worker container that records operational log sweeps and incident history.
+- `monitor-worker` is a separate demo worker container that records operational log sweeps into the incident log.
 - `action-runner` is a hidden executor container that processes queued service-action jobs so the API never talks to Docker directly.
 
 ## Tech Stack
@@ -88,25 +88,37 @@ infra/
 
 ## Application Routes
 
-- `/` -> frontend
-- `/health` -> health check through Nginx
-- `/api/health` -> backend health check
-- `/api/overview`
-- `/api/portfolio/projects`
-- `/api/portfolio/skills`
-- `/api/services`
-- `/api/services/{id}/actions`
-- `/api/service-action-jobs`
-- `/api/incidents`
-- `/api/incidents/{id}`
-- `/api/ai/incidents/analyze`
-- `/api/ai/generate-text`
-- `/api/ai/models`
+- `GET /` -> frontend
+- `GET /health` -> health check through Nginx
+- `GET /api/health` -> backend health check
+- `GET /api/overview`
+- `GET /api/portfolio/projects`
+- `GET /api/portfolio/projects/{id}`
+- `POST /api/portfolio/projects`
+- `PUT /api/portfolio/projects/{id}`
+- `DELETE /api/portfolio/projects/{id}`
+- `GET /api/portfolio/skills`
+- `POST /api/portfolio/skills`
+- `GET /api/services`
+- `GET /api/services/{id}`
+- `POST /api/services`
+- `PUT /api/services/{id}`
+- `DELETE /api/services/{id}`
+- `POST /api/services/{id}/actions`
+- `GET /api/service-action-jobs`
+- `GET /api/incidents`
+- `GET /api/incidents/{id}`
+- `POST /api/incidents`
+- `PUT /api/incidents/{id}`
+- `DELETE /api/incidents/{id}`
+- `POST /api/ai/incidents/analyze`
+- `POST /api/ai/generate-text`
+- `GET /api/ai/models`
 
 ## Local Run
 
 ```bash
-docker-compose -f docker-compose.dev.yaml up --build
+docker compose -f docker-compose.dev.yaml up --build
 ```
 
 Then open:
@@ -146,7 +158,7 @@ Required GitHub secret:
 
 ## Operational Flow
 
-- `monitor-worker` runs every minute and records health summaries or service-state changes in the incident log
+- `monitor-worker` runs every minute and records health summaries or service-state changes in `/api/incidents`
 - the API queues service-action intent, and `action-runner` executes allowed actions asynchronously
 - service action outcomes are written back to the same log so the AI assistant can reuse them later
 - logged incidents or events can be selected in the Incident Assistant to autofill the form, but manual analysis still works without a selection

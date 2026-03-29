@@ -18,7 +18,7 @@ services:
       - app_network
 
   backend:
-    image: ghcr.io/${GHCR_OWNER:-bkolubenka}/devops-platform-backend:${IMAGE_TAG:-main}
+    image: ghcr.io/${GHCR_OWNER}/devops-platform-backend:${IMAGE_TAG}
     container_name: backend_prod
     restart: unless-stopped
     command: ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
@@ -28,12 +28,12 @@ services:
       - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/devops_platform
       - ENVIRONMENT=production
       - SECRET_KEY=${SECRET_KEY}
-      - APP_VERSION=${APP_VERSION:-2.1.0}
-      - BUILD_SHA=${BUILD_SHA:-main}
-      - IMAGE_TAG=${IMAGE_TAG:-main}
-      - BUILD_DATE=${BUILD_DATE:-unknown}
-      - BUILD_ID=${BUILD_ID:-unknown}
-      - CONTAINER_REGISTRY=ghcr.io/${GHCR_OWNER:-bkolubenka}
+      - APP_VERSION=${APP_VERSION}
+      - BUILD_SHA=${BUILD_SHA}
+      - IMAGE_TAG=${IMAGE_TAG}
+      - BUILD_DATE=${BUILD_DATE}
+      - BUILD_ID=${BUILD_ID}
+      - CONTAINER_REGISTRY=${CONTAINER_REGISTRY}
     depends_on:
       db:
         condition: service_healthy
@@ -47,7 +47,7 @@ services:
       - app_network
 
   frontend:
-    image: ghcr.io/${GHCR_OWNER:-bkolubenka}/devops-platform-frontend:${IMAGE_TAG:-main}
+    image: ghcr.io/${GHCR_OWNER}/devops-platform-frontend:${IMAGE_TAG}
     container_name: frontend_prod
     restart: unless-stopped
     expose:
@@ -59,7 +59,7 @@ services:
       - app_network
 
   monitor-worker:
-    image: ghcr.io/${GHCR_OWNER:-bkolubenka}/devops-platform-monitor-worker:${IMAGE_TAG:-main}
+    image: ghcr.io/${GHCR_OWNER}/devops-platform-monitor-worker:${IMAGE_TAG}
     container_name: monitor_worker_prod
     restart: unless-stopped
     command: ["python", "-m", "backend.monitor_worker"]
@@ -90,7 +90,7 @@ services:
       - app_network
 
   action-runner:
-    image: ghcr.io/${GHCR_OWNER:-bkolubenka}/devops-platform-monitor-worker:${IMAGE_TAG:-main}
+    image: ghcr.io/${GHCR_OWNER}/devops-platform-monitor-worker:${IMAGE_TAG}
     container_name: action_runner_prod
     restart: unless-stopped
     command: ["python", "-m", "backend.monitor_worker"]

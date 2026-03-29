@@ -28,7 +28,7 @@ This repository is a VM-based DevOps pet project with:
 - Deployments are driven by `infra/ansible/playbook.yml`.
 - GitHub Actions deploy runs on a self-hosted Linux runner installed on the VM.
 - The deploy workflow executes Ansible locally on the VM through a generated local inventory and is triggered manually.
-- `BECOME_PASSWORD` is the current GitHub secret required for deploy.
+- `BECOME_PASSWORD`, `DB_PASSWORD`, and `SECRET_KEY` are the current GitHub secrets required for deploy.
 - Production app services are pulled from GHCR; dev still builds from source locally.
 - Prod runtime files are rendered into `/opt/devops-platform`; prod should not depend on an app git checkout on the server.
 - CI runs on every push and pull request, including `feat/*` branches.
