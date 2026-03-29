@@ -43,6 +43,8 @@ jobs:
         env:
           ANSIBLE_BECOME_PASSWORD: ${{ secrets.BECOME_PASSWORD }}
           DEPLOY_ENV: ${{ inputs.deploy_env }}
+          DEPLOY_REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
+          DEPLOY_REPO_REF: ${{ github.ref_name }}
         run: |
           ANSIBLE_LOCAL_TEMP=/tmp/.ansible/tmp \
           ansible-playbook \

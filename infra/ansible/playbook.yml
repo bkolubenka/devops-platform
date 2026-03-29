@@ -4,6 +4,7 @@
 
   vars:
     docker_packages:
+      - git
       - docker.io
       - docker-compose
       - certbot
@@ -22,20 +23,23 @@
         state: started
         enabled: true
 
-    - name: Create app directory
+    - name: Create app base directory
       file:
-        path: "{{ app_dir }}"
+        path: "{{ app_base_dir }}"
         state: directory
+
+    - name: Pull application source on server
+      git:
+        repo: "{{ repo_url }}"
+        dest: "{{ app_dir }}"
+        version: "{{ repo_version }}"
+        force: true
+        update: true
 
     - name: Create SSL directory
       file:
         path: "{{ app_dir }}/ssl"
         state: directory
-
-    - name: Copy project to server
-      copy:
-        src: ../../
-        dest: "{{ app_dir }}"
 
     - name: Gather service facts
       service_facts:

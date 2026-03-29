@@ -1,6 +1,8 @@
 app_name: devops-platform
 app_base_dir: /home/make/apps
 app_dir: "{{ app_base_dir }}/{{ app_name }}"
+repo_url: "{{ lookup('env', 'DEPLOY_REPO_URL') | default('https://github.com/bkolubenka/devops-platform.git', true) }}"
+repo_version: "{{ lookup('env', 'DEPLOY_REPO_REF') | default('main', true) }}"
 
 # Environment-specific settings
 deploy_env: "{{ lookup('env', 'DEPLOY_ENV') | default('dev') }}"

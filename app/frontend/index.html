@@ -3,19 +3,22 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>DevOps Platform - Portfolio & AI</title>
+    <title>DevOps Platform Portal</title>
     <style>
       :root {
         color-scheme: light;
-        --bg: #f5efe4;
-        --surface: #fffaf2;
-        --ink: #1f2937;
-        --muted: #5b6472;
-        --accent: #c75b12;
-        --accent-soft: #ffd9bf;
-        --line: rgba(31, 41, 55, 0.12);
-        --success: #10b981;
-        --warning: #f59e0b;
+        --bg: #f4efe7;
+        --surface: rgba(255, 250, 242, 0.9);
+        --surface-strong: #fffdf8;
+        --ink: #1d2533;
+        --muted: #5c6677;
+        --accent: #bf5a1d;
+        --accent-soft: #ffe1cb;
+        --line: rgba(29, 37, 51, 0.12);
+        --ok: #138a63;
+        --warn: #c5841a;
+        --bad: #bb3f3f;
+        --shadow: 0 22px 60px rgba(29, 37, 51, 0.08);
       }
 
       * {
@@ -28,57 +31,69 @@
         font-family: Georgia, "Times New Roman", serif;
         color: var(--ink);
         background:
-          radial-gradient(circle at top left, rgba(199, 91, 18, 0.16), transparent 30%),
-          linear-gradient(135deg, var(--bg), #f0f6ff 55%, #fff4ea);
+          radial-gradient(circle at top left, rgba(191, 90, 29, 0.14), transparent 28%),
+          radial-gradient(circle at top right, rgba(74, 122, 198, 0.12), transparent 20%),
+          linear-gradient(135deg, #f7f2ea, #edf4ff 58%, #fff6ee);
       }
 
       nav {
         position: sticky;
         top: 0;
-        background: rgba(255, 250, 242, 0.95);
-        backdrop-filter: blur(10px);
+        z-index: 10;
+        backdrop-filter: blur(12px);
+        background: rgba(255, 250, 242, 0.94);
         border-bottom: 1px solid var(--line);
-        z-index: 100;
       }
 
-      nav .container {
-        width: min(1200px, calc(100% - 32px));
+      .nav-shell,
+      .page-shell {
+        width: min(1180px, calc(100% - 32px));
         margin: 0 auto;
-        padding: 16px;
+      }
+
+      .nav-shell {
         display: flex;
-        justify-content: space-between;
         align-items: center;
+        justify-content: space-between;
+        padding: 16px 0;
+      }
+
+      .brand {
+        margin: 0;
+        color: var(--accent);
+        font-size: 2rem;
       }
 
       .nav-links {
         display: flex;
-        gap: 24px;
+        gap: 14px;
+        flex-wrap: wrap;
       }
 
       .nav-link {
         color: var(--ink);
         text-decoration: none;
-        font-weight: 500;
-        padding: 8px 16px;
-        border-radius: 8px;
-        transition: background-color 0.2s;
+        padding: 10px 16px;
+        border-radius: 999px;
+        transition: 0.2s ease;
       }
 
-      .nav-link:hover,
-      .nav-link.active {
+      .nav-link.active,
+      .nav-link:hover {
         background: var(--accent-soft);
         color: var(--accent);
       }
 
+      .page-shell {
+        padding: 40px 0 56px;
+      }
+
       main {
-        width: min(1200px, calc(100% - 32px));
-        margin: 48px auto;
-        padding: 32px;
         border: 1px solid var(--line);
-        border-radius: 24px;
-        background: rgba(255, 250, 242, 0.88);
-        backdrop-filter: blur(10px);
-        box-shadow: 0 24px 60px rgba(31, 41, 55, 0.08);
+        border-radius: 28px;
+        padding: 30px;
+        background: var(--surface);
+        box-shadow: var(--shadow);
       }
 
       .section {
@@ -90,451 +105,1004 @@
       }
 
       .eyebrow {
-        margin: 0 0 12px;
+        margin: 0 0 10px;
         color: var(--accent);
-        font-size: 0.9rem;
-        letter-spacing: 0.12em;
         text-transform: uppercase;
+        letter-spacing: 0.12em;
+        font-size: 0.86rem;
       }
 
       h1 {
-        margin: 0 0 16px;
-        font-size: clamp(2.5rem, 6vw, 5rem);
-        line-height: 0.95;
+        margin: 0 0 14px;
+        line-height: 0.94;
+        font-size: clamp(2.6rem, 7vw, 5.2rem);
       }
 
       h2 {
-        margin: 32px 0 16px;
-        font-size: 2rem;
-        color: var(--ink);
+        margin: 0 0 12px;
+        font-size: 1.8rem;
       }
 
       p {
-        color: var(--muted);
-        font-size: 1.1rem;
-        line-height: 1.6;
-      }
-
-      .grid {
-        display: grid;
-        gap: 16px;
-        margin-top: 28px;
-      }
-
-      @media (min-width: 720px) {
-        .grid {
-          grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        }
-      }
-
-      .card {
-        padding: 18px;
-        border-radius: 18px;
-        border: 1px solid var(--line);
-        background: white;
-        transition: transform 0.2s, box-shadow 0.2s;
-      }
-
-      .card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 25px rgba(31, 41, 55, 0.1);
-      }
-
-      .project-card {
-        height: 100%;
-      }
-
-      .project-title {
-        margin: 0 0 8px;
-        font-size: 1.25rem;
-        font-weight: 600;
-      }
-
-      .project-description {
-        margin: 0 0 12px;
-        color: var(--muted);
-        font-size: 0.95rem;
-        line-height: 1.5;
-      }
-
-      .project-tech {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        margin-bottom: 12px;
-      }
-
-      .tech-tag {
-        padding: 4px 8px;
-        background: var(--accent-soft);
-        color: var(--accent);
-        border-radius: 12px;
-        font-size: 0.8rem;
-        font-weight: 500;
-      }
-
-      .project-links {
-        display: flex;
-        gap: 12px;
-      }
-
-      .project-link {
-        color: var(--accent);
-        text-decoration: none;
-        font-size: 0.9rem;
-        font-weight: 500;
-      }
-
-      .project-link:hover {
-        text-decoration: underline;
-      }
-
-      .skill-card {
-        text-align: center;
-      }
-
-      .skill-name {
-        margin: 0 0 8px;
-        font-weight: 600;
-      }
-
-      .skill-level {
-        display: flex;
-        justify-content: center;
-        gap: 4px;
-        margin-bottom: 8px;
-      }
-
-      .skill-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: var(--muted);
-      }
-
-      .skill-dot.filled {
-        background: var(--accent);
-      }
-
-      .skill-category {
-        color: var(--muted);
-        font-size: 0.85rem;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-      }
-
-      .ai-section {
-        max-width: 800px;
-        margin: 0 auto;
-      }
-
-      .ai-input {
-        width: 100%;
-        padding: 16px;
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        font-family: inherit;
-        font-size: 1rem;
-        margin-bottom: 16px;
-        resize: vertical;
-      }
-
-      .ai-button {
-        padding: 12px 24px;
-        background: var(--accent);
-        color: white;
-        border: none;
-        border-radius: 8px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: background-color 0.2s;
-      }
-
-      .ai-button:hover {
-        background: #a84a0f;
-      }
-
-      .ai-button:disabled {
-        background: var(--muted);
-        cursor: not-allowed;
-      }
-
-      .ai-output {
-        margin-top: 24px;
-        padding: 16px;
-        background: white;
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        min-height: 100px;
-        white-space: pre-wrap;
-      }
-
-      .label {
-        margin: 0 0 6px;
-        font-size: 0.82rem;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: var(--muted);
-      }
-
-      .value {
         margin: 0;
-        font-size: 1.15rem;
+        color: var(--muted);
+        line-height: 1.6;
+        font-size: 1.05rem;
       }
 
-      .status {
+      .hero {
+        display: grid;
+        gap: 28px;
+      }
+
+      .status-pill {
         display: inline-flex;
         align-items: center;
         gap: 10px;
-        margin-top: 18px;
+        margin-top: 24px;
         padding: 10px 14px;
         border-radius: 999px;
         background: var(--accent-soft);
-        color: var(--ink);
         font-weight: 700;
       }
 
-      .dot {
+      .status-dot {
         width: 10px;
         height: 10px;
         border-radius: 50%;
         background: var(--accent);
       }
 
-      code {
-        font-family: "Courier New", monospace;
-        font-size: 0.95em;
+      .summary-grid,
+      .grid {
+        display: grid;
+        gap: 16px;
+        margin-top: 28px;
       }
 
-      .loading {
-        display: inline-block;
-        width: 16px;
-        height: 16px;
-        border: 2px solid var(--muted);
-        border-radius: 50%;
-        border-top-color: var(--accent);
-        animation: spin 1s ease-in-out infinite;
+      .summary-grid {
+        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
       }
 
-      @keyframes spin {
-        to { transform: rotate(360deg); }
+      .grid {
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      }
+
+      .card,
+      .panel {
+        background: var(--surface-strong);
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        padding: 18px;
+      }
+
+      .card-title {
+        margin: 0 0 8px;
+        font-size: 1.15rem;
+      }
+
+      .label {
+        margin-bottom: 8px;
+        color: var(--muted);
+        text-transform: uppercase;
+        font-size: 0.82rem;
+        letter-spacing: 0.08em;
+      }
+
+      .metric {
+        font-size: 2rem;
+        line-height: 1;
+        color: var(--ink);
+      }
+
+      .metric-meta {
+        margin-top: 8px;
+        font-size: 0.95rem;
+      }
+
+      .ok {
+        color: var(--ok);
+      }
+
+      .warn {
+        color: var(--warn);
+      }
+
+      .bad {
+        color: var(--bad);
+      }
+
+      .section-layout {
+        display: grid;
+        gap: 24px;
+        margin-top: 24px;
+      }
+
+      @media (min-width: 980px) {
+        .section-layout {
+          grid-template-columns: minmax(300px, 360px) 1fr;
+          align-items: start;
+        }
+      }
+
+      form {
+        display: grid;
+        gap: 12px;
+      }
+
+      input,
+      textarea,
+      select {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 12px 14px;
+        background: white;
+        color: var(--ink);
+        font: inherit;
+      }
+
+      textarea {
+        min-height: 110px;
+        resize: vertical;
+      }
+
+      .two-up {
+        display: grid;
+        gap: 12px;
+      }
+
+      @media (min-width: 720px) {
+        .two-up {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+
+      .actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      button {
+        border: 0;
+        border-radius: 12px;
+        padding: 11px 16px;
+        font: inherit;
+        cursor: pointer;
+        transition: transform 0.15s ease, opacity 0.15s ease;
+      }
+
+      button:hover {
+        transform: translateY(-1px);
+      }
+
+      .btn-primary {
+        background: var(--accent);
+        color: white;
+      }
+
+      .btn-secondary {
+        background: #eff2f7;
+        color: var(--ink);
+      }
+
+      .btn-danger {
+        background: #fbe2df;
+        color: #a03636;
+      }
+
+      .stack {
+        display: grid;
+        gap: 14px;
+      }
+
+      .tag-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 10px;
+      }
+
+      .tag {
+        padding: 4px 8px;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-size: 0.84rem;
+      }
+
+      .muted-row {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 0.94rem;
+      }
+
+      .detail-list {
+        display: grid;
+        gap: 10px;
+        margin-top: 16px;
+      }
+
+      .detail-item {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        border-top: 1px solid var(--line);
+        padding-top: 10px;
+      }
+
+      .service-health {
+        font-weight: 700;
+      }
+
+      .empty {
+        padding: 18px;
+        border: 1px dashed var(--line);
+        border-radius: 16px;
+        text-align: center;
+      }
+
+      .ai-output {
+        min-height: 120px;
+        margin-top: 18px;
+        padding: 16px;
+        border-radius: 16px;
+        border: 1px solid var(--line);
+        background: var(--surface-strong);
+        white-space: pre-wrap;
       }
     </style>
   </head>
   <body>
     <nav>
-      <div class="container">
-        <h1 style="margin: 0; font-size: 1.5rem; color: var(--accent);">DevOps Platform</h1>
+      <div class="nav-shell">
+        <h1 class="brand">DevOps Platform</h1>
         <div class="nav-links">
-          <a href="#" class="nav-link active" data-section="home">Home</a>
-          <a href="#" class="nav-link" data-section="portfolio">Portfolio</a>
+          <a href="#" class="nav-link active" data-section="home">Overview</a>
+          <a href="#" class="nav-link" data-section="portfolio">Projects</a>
+          <a href="#" class="nav-link" data-section="services">Services</a>
           <a href="#" class="nav-link" data-section="ai">AI Demo</a>
         </div>
       </div>
     </nav>
 
-    <main>
-      <!-- Home Section -->
-      <section id="home" class="section active">
-        <p class="eyebrow">DevOps Full Cycle Project</p>
-        <h1>Platform as Code</h1>
-        <p>
-          A comprehensive DevOps platform featuring portfolio showcase, AI/ML capabilities,
-          containerized deployment, and automated infrastructure management.
-        </p>
+    <div class="page-shell">
+      <main>
+        <section id="home" class="section active">
+          <div class="hero">
+            <div>
+              <p class="eyebrow">DevOps Full Cycle Project</p>
+              <h1>Platform as Code</h1>
+              <p>
+                A lightweight internal platform portal showing service inventory,
+                project portfolio data, and infrastructure health from one deployed stack.
+              </p>
+              <div class="status-pill">
+                <span class="status-dot"></span>
+                <span id="health-status">Checking backend health...</span>
+              </div>
+            </div>
+          </div>
 
-        <div class="status">
-          <span class="dot"></span>
-          <span id="health-status">Checking backend health...</span>
-        </div>
+          <section class="summary-grid" id="overview-metrics"></section>
 
-        <section class="grid">
-          <article class="card">
-            <p class="label">Frontend</p>
-            <p class="value">Nginx static container</p>
-          </article>
-          <article class="card">
-            <p class="label">Backend</p>
-            <p class="value">FastAPI with portfolio & AI APIs</p>
-          </article>
-          <article class="card">
-            <p class="label">Infrastructure</p>
-            <p class="value">Docker + Ansible automation</p>
-          </article>
-          <article class="card">
-            <p class="label">AI/ML</p>
-            <p class="value">Text generation & ML models</p>
-          </article>
+          <div class="section-layout">
+            <section class="panel">
+              <p class="eyebrow">Infrastructure</p>
+              <h2>Service Health</h2>
+              <div id="overview-services" class="stack"></div>
+            </section>
+
+            <section class="panel">
+              <p class="eyebrow">Platform Summary</p>
+              <h2>What this stack is doing</h2>
+              <div class="detail-list">
+                <div class="detail-item">
+                  <span>Frontend</span>
+                  <strong>Static portal behind Nginx</strong>
+                </div>
+                <div class="detail-item">
+                  <span>Backend</span>
+                  <strong>FastAPI + PostgreSQL CRUD APIs</strong>
+                </div>
+                <div class="detail-item">
+                  <span>Deploy</span>
+                  <strong>Ansible on VM self-hosted runner</strong>
+                </div>
+                <div class="detail-item">
+                  <span>Focus</span>
+                  <strong>Projects, services, and platform visibility</strong>
+                </div>
+              </div>
+            </section>
+          </div>
         </section>
-      </section>
 
-      <!-- Portfolio Section -->
-      <section id="portfolio" class="section">
-        <p class="eyebrow">My Portfolio</p>
-        <h1>Projects & Skills</h1>
-        <p>
-          A showcase of my work in DevOps, software development, and machine learning.
-        </p>
+        <section id="portfolio" class="section">
+          <p class="eyebrow">Portfolio Management</p>
+          <h1>Projects</h1>
+          <p>Manage portfolio entries with richer metadata, editable details, and soft-delete support.</p>
 
-        <h2>Featured Projects</h2>
-        <div id="projects-grid" class="grid">
-          <!-- Projects will be loaded here -->
-        </div>
+          <div class="section-layout">
+            <section class="panel">
+              <p class="eyebrow">Editor</p>
+              <h2 id="project-form-title">Add Project</h2>
+              <form id="project-form">
+                <input type="text" id="project-title" placeholder="Project title" required />
+                <textarea id="project-description" placeholder="Describe the project" required></textarea>
+                <input
+                  type="text"
+                  id="project-technologies"
+                  placeholder="Technologies, comma separated"
+                  required
+                />
+                <div class="two-up">
+                  <input type="text" id="project-category" placeholder="Category" value="Platform" />
+                  <input type="text" id="project-status" placeholder="Status" value="active" />
+                </div>
+                <div class="two-up">
+                  <input type="text" id="project-owner" placeholder="Owner" />
+                  <input type="text" id="project-image-url" placeholder="Image URL" />
+                </div>
+                <div class="two-up">
+                  <input type="url" id="project-github-url" placeholder="GitHub URL" />
+                  <input type="url" id="project-demo-url" placeholder="Demo URL" />
+                </div>
+                <label>
+                  <input type="checkbox" id="project-featured" />
+                  Featured project
+                </label>
+                <div class="actions">
+                  <button type="submit" class="btn-primary" id="project-submit">Create project</button>
+                  <button type="button" class="btn-secondary" id="project-reset">Reset</button>
+                </div>
+              </form>
+            </section>
 
-        <h2>Technical Skills</h2>
-        <div id="skills-grid" class="grid">
-          <!-- Skills will be loaded here -->
-        </div>
-      </section>
+            <section class="panel">
+              <p class="eyebrow">Collection</p>
+              <h2>Current Projects</h2>
+              <div id="projects-grid" class="grid"></div>
+            </section>
+          </div>
+        </section>
 
-      <!-- AI Section -->
-      <section id="ai" class="section">
-        <div class="ai-section">
-          <p class="eyebrow">AI & Machine Learning</p>
-          <h1>Text Generation Demo</h1>
+        <section id="services" class="section">
+          <p class="eyebrow">Infrastructure Catalog</p>
+          <h1>Services</h1>
+          <p>Track the platform services you operate, their owners, health targets, and environment metadata.</p>
+
+          <div class="section-layout">
+            <section class="panel">
+              <p class="eyebrow">Editor</p>
+              <h2 id="service-form-title">Add Service</h2>
+              <form id="service-form">
+                <input type="text" id="service-name" placeholder="Service name" required />
+                <div class="two-up">
+                  <input type="text" id="service-type" placeholder="Service type" required />
+                  <input type="text" id="service-environment" placeholder="Environment" value="dev" />
+                </div>
+                <textarea id="service-description" placeholder="Describe the service" required></textarea>
+                <div class="two-up">
+                  <input type="url" id="service-url" placeholder="Public or internal URL" />
+                  <input type="url" id="service-health-endpoint" placeholder="Health endpoint URL" />
+                </div>
+                <div class="two-up">
+                  <input type="number" id="service-port" placeholder="Port" min="1" max="65535" />
+                  <input type="text" id="service-status" placeholder="Status" value="running" />
+                </div>
+                <input type="text" id="service-owner" placeholder="Owner" />
+                <div class="actions">
+                  <button type="submit" class="btn-primary" id="service-submit">Create service</button>
+                  <button type="button" class="btn-secondary" id="service-reset">Reset</button>
+                </div>
+              </form>
+            </section>
+
+            <section class="panel">
+              <p class="eyebrow">Catalog</p>
+              <h2>Tracked Services</h2>
+              <div id="services-grid" class="grid"></div>
+            </section>
+          </div>
+        </section>
+
+        <section id="ai" class="section">
+          <p class="eyebrow">AIOps Assistant</p>
+          <h1>Incident Response Copilot</h1>
           <p>
-            Experience AI-powered text generation. Enter a prompt below to see the model in action.
+            Analyze incidents against the current service catalog and platform overview to get deterministic triage guidance and runbook steps.
           </p>
 
-          <form id="ai-form">
-            <textarea
-              id="ai-prompt"
-              class="ai-input"
-              placeholder="Enter your prompt here... (e.g., 'Tell me about DevOps', 'Hello AI assistant')"
-              rows="3"
-            ></textarea>
-            <button type="submit" class="ai-button" id="generate-btn">
-              Generate Text
-            </button>
-          </form>
+          <div class="section-layout" style="margin-top: 28px;">
+            <section class="panel">
+              <p class="eyebrow">Incident Input</p>
+              <h2>Analyze Incident</h2>
+              <form id="ai-form">
+                <div class="two-up">
+                  <select id="incident-service" required>
+                    <option value="">Select affected service</option>
+                  </select>
+                  <select id="incident-severity" required>
+                    <option value="low">Low</option>
+                    <option value="medium" selected>Medium</option>
+                    <option value="high">High</option>
+                    <option value="critical">Critical</option>
+                  </select>
+                </div>
+                <input
+                  type="text"
+                  id="incident-summary"
+                  placeholder="Short summary, e.g. API returns 502 through nginx"
+                  required
+                />
+                <textarea
+                  id="incident-symptoms"
+                  placeholder="Observed symptoms, logs, errors, timeouts, or user impact"
+                  required
+                ></textarea>
+                <textarea
+                  id="incident-recent-changes"
+                  placeholder="Optional: recent deploys, config changes, dependency updates"
+                ></textarea>
+                <div class="actions">
+                  <button type="submit" class="btn-primary" id="generate-btn">Analyze Incident</button>
+                </div>
+              </form>
+            </section>
 
-          <div id="ai-output" class="ai-output" style="display: none;">
-            <!-- AI response will appear here -->
+            <section class="panel">
+              <p class="eyebrow">Assistant Output</p>
+              <h2>Runbook Guidance</h2>
+              <div id="ai-output" class="ai-output">
+                Select a service, describe the symptoms, and the assistant will return incident class, likely causes, and next checks.
+              </div>
+            </section>
           </div>
-        </div>
-      </section>
-    </main>
+        </section>
+      </main>
+    </div>
 
     <script>
-      // Navigation
-      document.querySelectorAll('.nav-link').forEach(link => {
-        link.addEventListener('click', (e) => {
-          e.preventDefault();
-          const sectionId = link.dataset.section;
+      const state = {
+        editingProjectId: null,
+        editingServiceId: null,
+        services: [],
+      };
 
-          // Update active nav link
-          document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
-          link.classList.add('active');
-
-          // Show active section
-          document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-          document.getElementById(sectionId).classList.add('active');
-
-          // Load section data if needed
-          if (sectionId === 'portfolio') {
-            loadPortfolio();
-          }
+      function setActiveSection(sectionId) {
+        document.querySelectorAll(".nav-link").forEach((link) => {
+          link.classList.toggle("active", link.dataset.section === sectionId);
         });
-      });
+        document.querySelectorAll(".section").forEach((section) => {
+          section.classList.toggle("active", section.id === sectionId);
+        });
+      }
 
-      // Health check
+      async function apiRequest(path, options = {}) {
+        const response = await fetch(path, {
+          headers: {
+            "Content-Type": "application/json",
+            ...(options.headers || {}),
+          },
+          ...options,
+        });
+
+        if (!response.ok) {
+          let detail = response.statusText;
+          try {
+            const payload = await response.json();
+            detail = payload.detail || JSON.stringify(payload);
+          } catch (error) {
+            detail = response.statusText;
+          }
+          throw new Error(detail);
+        }
+
+        if (response.status === 204) {
+          return null;
+        }
+
+        return response.json();
+      }
+
+      function statusClass(value) {
+        if (value === "ok" || value === "running") return "ok";
+        if (value === "warning" || value === "planned") return "warn";
+        return "bad";
+      }
+
+      function parseTechnologies(value) {
+        return value
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean);
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function resetProjectForm() {
+        state.editingProjectId = null;
+        document.getElementById("project-form-title").textContent = "Add Project";
+        document.getElementById("project-submit").textContent = "Create project";
+        document.getElementById("project-form").reset();
+        document.getElementById("project-category").value = "Platform";
+        document.getElementById("project-status").value = "active";
+      }
+
+      function resetServiceForm() {
+        state.editingServiceId = null;
+        document.getElementById("service-form-title").textContent = "Add Service";
+        document.getElementById("service-submit").textContent = "Create service";
+        document.getElementById("service-form").reset();
+        document.getElementById("service-environment").value = "dev";
+        document.getElementById("service-status").value = "running";
+      }
+
+      function fillProjectForm(project) {
+        state.editingProjectId = project.id;
+        document.getElementById("project-form-title").textContent = "Edit Project";
+        document.getElementById("project-submit").textContent = "Save project";
+        document.getElementById("project-title").value = project.title;
+        document.getElementById("project-description").value = project.description;
+        document.getElementById("project-technologies").value = project.technologies.join(", ");
+        document.getElementById("project-category").value = project.category || "";
+        document.getElementById("project-status").value = project.status || "";
+        document.getElementById("project-owner").value = project.owner || "";
+        document.getElementById("project-image-url").value = project.image_url || "";
+        document.getElementById("project-github-url").value = project.github_url || "";
+        document.getElementById("project-demo-url").value = project.demo_url || "";
+        document.getElementById("project-featured").checked = !!project.featured;
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+
+      function fillServiceForm(service) {
+        state.editingServiceId = service.id;
+        document.getElementById("service-form-title").textContent = "Edit Service";
+        document.getElementById("service-submit").textContent = "Save service";
+        document.getElementById("service-name").value = service.name;
+        document.getElementById("service-type").value = service.service_type;
+        document.getElementById("service-environment").value = service.environment || "";
+        document.getElementById("service-description").value = service.description;
+        document.getElementById("service-url").value = service.url || "";
+        document.getElementById("service-health-endpoint").value = service.health_endpoint || "";
+        document.getElementById("service-port").value = service.port || "";
+        document.getElementById("service-status").value = service.status || "";
+        document.getElementById("service-owner").value = service.owner || "";
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+
       async function loadHealth() {
         const target = document.getElementById("health-status");
-
         try {
-          const response = await fetch("/api/health");
-          const data = await response.json();
+          const data = await apiRequest("/api/health");
           target.textContent = "Backend health: " + data.status;
         } catch (error) {
           target.textContent = "Backend health check failed";
         }
       }
 
-      // Portfolio loading
-      async function loadPortfolio() {
+      async function loadOverview() {
+        const metrics = document.getElementById("overview-metrics");
+        const services = document.getElementById("overview-services");
+
         try {
-          // Load projects
-          const projectsResponse = await fetch('/api/portfolio/projects');
-          const projects = await projectsResponse.json();
+          const data = await apiRequest("/api/overview");
 
-          const projectsGrid = document.getElementById('projects-grid');
-          projectsGrid.innerHTML = projects.map(project => `
-            <article class="card project-card">
-              <h3 class="project-title">${project.title}</h3>
-              <p class="project-description">${project.description}</p>
-              <div class="project-tech">
-                ${project.technologies.map(tech => `<span class="tech-tag">${tech}</span>`).join('')}
-              </div>
-              <div class="project-links">
-                ${project.github_url ? `<a href="${project.github_url}" class="project-link" target="_blank">GitHub</a>` : ''}
-                ${project.demo_url ? `<a href="${project.demo_url}" class="project-link" target="_blank">Demo</a>` : ''}
-              </div>
+          metrics.innerHTML = `
+            <article class="card">
+              <div class="label">Backend</div>
+              <div class="metric ${statusClass(data.backend_status)}">${data.backend_status}</div>
+              <p class="metric-meta">API status inside the backend container.</p>
             </article>
-          `).join('');
-
-          // Load skills
-          const skillsResponse = await fetch('/api/portfolio/skills');
-          const skills = await skillsResponse.json();
-
-          const skillsGrid = document.getElementById('skills-grid');
-          skillsGrid.innerHTML = skills.map(skill => `
-            <article class="card skill-card">
-              <h3 class="skill-name">${skill.name}</h3>
-              <div class="skill-level">
-                ${Array.from({length: 5}, (_, i) =>
-                  `<div class="skill-dot ${i < skill.level ? 'filled' : ''}"></div>`
-                ).join('')}
-              </div>
-              <p class="skill-category">${skill.category}</p>
+            <article class="card">
+              <div class="label">Database</div>
+              <div class="metric ${statusClass(data.database_status)}">${data.database_status}</div>
+              <p class="metric-meta">Connectivity from FastAPI to PostgreSQL.</p>
             </article>
-          `).join('');
+            <article class="card">
+              <div class="label">Frontend / Nginx</div>
+              <div class="metric">${data.frontend_status} / ${data.nginx_status}</div>
+              <p class="metric-meta">Portal delivery path through the reverse proxy.</p>
+            </article>
+            <article class="card">
+              <div class="label">Portfolio</div>
+              <div class="metric">${data.project_count}</div>
+              <p class="metric-meta">${data.featured_project_count} featured projects tracked.</p>
+            </article>
+            <article class="card">
+              <div class="label">Services</div>
+              <div class="metric">${data.service_count}</div>
+              <p class="metric-meta">${data.healthy_service_count} healthy service targets.</p>
+            </article>
+            <article class="card">
+              <div class="label">Environment</div>
+              <div class="metric">${data.environment}</div>
+              <p class="metric-meta">Current application profile returned by the API.</p>
+            </article>
+          `;
 
+          if (data.services.length === 0) {
+            services.innerHTML = '<div class="empty">No tracked services yet.</div>';
+            return;
+          }
+
+          services.innerHTML = data.services
+            .map(
+              (service) => `
+                <article class="card">
+                  <h3 class="card-title">${service.name}</h3>
+                  <p>${service.service_type} in ${service.environment}</p>
+                  <div class="muted-row">
+                    <span>Owner: ${service.owner || "unassigned"}</span>
+                    <span class="service-health ${service.healthy ? "ok" : "bad"}">
+                      ${service.healthy ? "healthy" : "unhealthy"}
+                    </span>
+                  </div>
+                  <div class="muted-row">
+                    <span>Status: ${service.status}</span>
+                    <span>${service.detail}</span>
+                  </div>
+                </article>
+              `
+            )
+            .join("");
         } catch (error) {
-          console.error('Failed to load portfolio:', error);
+          metrics.innerHTML = `<div class="empty">Failed to load overview: ${error.message}</div>`;
+          services.innerHTML = "";
         }
       }
 
-      // AI text generation
-      document.getElementById('ai-form').addEventListener('submit', async (e) => {
-        e.preventDefault();
+      async function loadProjects() {
+        const grid = document.getElementById("projects-grid");
+        try {
+          const projects = await apiRequest("/api/portfolio/projects");
+          if (projects.length === 0) {
+            grid.innerHTML = '<div class="empty">No projects yet. Create the first one from the editor.</div>';
+            return;
+          }
 
-        const prompt = document.getElementById('ai-prompt').value.trim();
-        if (!prompt) return;
+          grid.innerHTML = projects
+            .map(
+              (project) => `
+                <article class="card">
+                  <h3 class="card-title">${project.title}</h3>
+                  <p>${project.description}</p>
+                  <div class="tag-list">
+                    ${project.technologies.map((tech) => `<span class="tag">${tech}</span>`).join("")}
+                  </div>
+                  <div class="muted-row">
+                    <span>Category: ${project.category}</span>
+                    <span class="${statusClass(project.status)}">Status: ${project.status}</span>
+                    <span>${project.featured ? "Featured" : "Standard"}</span>
+                  </div>
+                  <div class="muted-row">
+                    <span>Owner: ${project.owner || "unassigned"}</span>
+                    ${project.github_url ? `<a class="project-link" href="${project.github_url}" target="_blank" rel="noreferrer">GitHub</a>` : ""}
+                    ${project.demo_url ? `<a class="project-link" href="${project.demo_url}" target="_blank" rel="noreferrer">Demo</a>` : ""}
+                  </div>
+                  <div class="actions" style="margin-top: 14px;">
+                    <button class="btn-secondary" data-action="edit-project" data-id="${project.id}">Edit</button>
+                    <button class="btn-danger" data-action="delete-project" data-id="${project.id}">Remove</button>
+                  </div>
+                </article>
+              `
+            )
+            .join("");
+        } catch (error) {
+          grid.innerHTML = `<div class="empty">Failed to load projects: ${error.message}</div>`;
+        }
+      }
 
-        const button = document.getElementById('generate-btn');
-        const output = document.getElementById('ai-output');
+      async function loadServices() {
+        const grid = document.getElementById("services-grid");
+        try {
+          const services = await apiRequest("/api/services");
+          state.services = services;
+          renderIncidentServiceOptions();
+          if (services.length === 0) {
+            grid.innerHTML = '<div class="empty">No services yet. Add a tracked service from the editor.</div>';
+            return;
+          }
 
-        // Show loading state
-        button.disabled = true;
-        button.innerHTML = '<div class="loading"></div> Generating...';
-        output.style.display = 'block';
-        output.textContent = 'Generating response...';
+          grid.innerHTML = services
+            .map(
+              (service) => `
+                <article class="card">
+                  <h3 class="card-title">${service.name}</h3>
+                  <p>${service.description}</p>
+                  <div class="muted-row">
+                    <span>Type: ${service.service_type}</span>
+                    <span>Env: ${service.environment}</span>
+                    <span class="${statusClass(service.status)}">Status: ${service.status}</span>
+                  </div>
+                  <div class="muted-row">
+                    <span>Owner: ${service.owner || "unassigned"}</span>
+                    ${service.port ? `<span>Port: ${service.port}</span>` : ""}
+                  </div>
+                  <div class="muted-row">
+                    ${service.url ? `<span>URL: ${service.url}</span>` : ""}
+                    ${service.health_endpoint ? `<span>Health: ${service.health_endpoint}</span>` : ""}
+                  </div>
+                  <div class="actions" style="margin-top: 14px;">
+                    <button class="btn-secondary" data-action="edit-service" data-id="${service.id}">Edit</button>
+                    <button class="btn-danger" data-action="delete-service" data-id="${service.id}">Remove</button>
+                  </div>
+                </article>
+              `
+            )
+            .join("");
+        } catch (error) {
+          grid.innerHTML = `<div class="empty">Failed to load services: ${error.message}</div>`;
+        }
+      }
+
+      function renderIncidentServiceOptions() {
+        const select = document.getElementById("incident-service");
+        const currentValue = select.value;
+        const options = state.services
+          .map(
+            (service) =>
+              `<option value="${service.id}">${escapeHtml(service.name)} (${escapeHtml(service.service_type)})</option>`
+          )
+          .join("");
+        select.innerHTML = `<option value="">Select affected service</option>${options}`;
+        if (currentValue) {
+          select.value = currentValue;
+        }
+      }
+
+      function renderIncidentResult(result) {
+        const output = document.getElementById("ai-output");
+        output.innerHTML = `
+          <div class="stack">
+            <div>
+              <div class="label">Incident Class</div>
+              <p class="card-title">${escapeHtml(result.incident_class)}</p>
+            </div>
+            <div class="two-up">
+              <div class="card">
+                <div class="label">Priority</div>
+                <p class="card-title ${statusClass(result.priority)}">${escapeHtml(result.priority)}</p>
+              </div>
+              <div class="card">
+                <div class="label">Confidence</div>
+                <p class="card-title">${escapeHtml(result.confidence)}</p>
+              </div>
+            </div>
+            <div class="card">
+              <div class="label">Service Context</div>
+              <p class="card-title">${escapeHtml(result.service_context.name)}</p>
+              <div class="muted-row">
+                <span>Type: ${escapeHtml(result.service_context.service_type)}</span>
+                <span>Env: ${escapeHtml(result.service_context.environment)}</span>
+                <span>Status: ${escapeHtml(result.service_context.status)}</span>
+              </div>
+              <div class="muted-row">
+                <span>Health: ${result.service_context.healthy ? "healthy" : "unhealthy"}</span>
+                <span>${escapeHtml(result.service_context.health_detail || "no probe result")}</span>
+              </div>
+            </div>
+            <div class="card">
+              <div class="label">Suspected Causes</div>
+              <ul>${result.suspected_causes.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+            </div>
+            <div class="card">
+              <div class="label">Recommended Checks</div>
+              <ul>${result.recommended_checks.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+            </div>
+            <div class="card">
+              <div class="label">Suggested Runbook</div>
+              <ul>${result.suggested_runbook.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+            </div>
+            <div class="card">
+              <div class="label">Overview Snapshot</div>
+              <div class="muted-row">
+                <span>Backend: ${escapeHtml(result.overview_snapshot.backend_status)}</span>
+                <span>Database: ${escapeHtml(result.overview_snapshot.database_status)}</span>
+                <span>Nginx: ${escapeHtml(result.overview_snapshot.nginx_status)}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      async function getProject(id) {
+        return apiRequest(`/api/portfolio/projects/${id}`);
+      }
+
+      async function getService(id) {
+        return apiRequest(`/api/services/${id}`);
+      }
+
+      async function refreshPortal() {
+        await Promise.all([loadHealth(), loadOverview(), loadProjects(), loadServices()]);
+      }
+
+      document.querySelectorAll(".nav-link").forEach((link) => {
+        link.addEventListener("click", async (event) => {
+          event.preventDefault();
+          const sectionId = link.dataset.section;
+          setActiveSection(sectionId);
+
+          if (sectionId === "home") await loadOverview();
+          if (sectionId === "portfolio") await loadProjects();
+          if (sectionId === "services") await loadServices();
+        });
+      });
+
+      document.getElementById("project-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+
+        const payload = {
+          title: document.getElementById("project-title").value.trim(),
+          description: document.getElementById("project-description").value.trim(),
+          technologies: parseTechnologies(document.getElementById("project-technologies").value),
+          category: document.getElementById("project-category").value.trim() || "Platform",
+          status: document.getElementById("project-status").value.trim() || "active",
+          owner: document.getElementById("project-owner").value.trim() || null,
+          image_url: document.getElementById("project-image-url").value.trim() || null,
+          github_url: document.getElementById("project-github-url").value.trim() || null,
+          demo_url: document.getElementById("project-demo-url").value.trim() || null,
+          featured: document.getElementById("project-featured").checked,
+        };
+
+        const path = state.editingProjectId
+          ? `/api/portfolio/projects/${state.editingProjectId}`
+          : "/api/portfolio/projects";
+        const method = state.editingProjectId ? "PUT" : "POST";
 
         try {
-          const response = await fetch('/api/ai/generate-text', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              prompt: prompt,
-              max_length: 200
-            })
+          await apiRequest(path, {
+            method,
+            body: JSON.stringify(payload),
           });
-
-          const data = await response.json();
-          output.textContent = data.generated_text;
+          resetProjectForm();
+          await Promise.all([loadProjects(), loadOverview()]);
         } catch (error) {
-          output.textContent = 'Error: Failed to generate text. Please try again.';
-          console.error('AI generation error:', error);
-        } finally {
-          button.disabled = false;
-          button.textContent = 'Generate Text';
+          alert(`Project save failed: ${error.message}`);
         }
       });
 
-      // Initialize
-      loadHealth();
+      document.getElementById("service-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+
+        const payload = {
+          name: document.getElementById("service-name").value.trim(),
+          service_type: document.getElementById("service-type").value.trim(),
+          description: document.getElementById("service-description").value.trim(),
+          environment: document.getElementById("service-environment").value.trim() || "dev",
+          url: document.getElementById("service-url").value.trim() || null,
+          health_endpoint: document.getElementById("service-health-endpoint").value.trim() || null,
+          port: document.getElementById("service-port").value ? Number(document.getElementById("service-port").value) : null,
+          status: document.getElementById("service-status").value.trim() || "running",
+          owner: document.getElementById("service-owner").value.trim() || null,
+        };
+
+        const path = state.editingServiceId
+          ? `/api/services/${state.editingServiceId}`
+          : "/api/services";
+        const method = state.editingServiceId ? "PUT" : "POST";
+
+        try {
+          await apiRequest(path, {
+            method,
+            body: JSON.stringify(payload),
+          });
+          resetServiceForm();
+          await Promise.all([loadServices(), loadOverview()]);
+        } catch (error) {
+          alert(`Service save failed: ${error.message}`);
+        }
+      });
+
+      document.getElementById("project-reset").addEventListener("click", resetProjectForm);
+      document.getElementById("service-reset").addEventListener("click", resetServiceForm);
+
+      document.getElementById("projects-grid").addEventListener("click", async (event) => {
+        const button = event.target.closest("button");
+        if (!button) return;
+        const id = button.dataset.id;
+        if (!id) return;
+
+        if (button.dataset.action === "edit-project") {
+          try {
+            const project = await getProject(id);
+            fillProjectForm(project);
+          } catch (error) {
+            alert(`Failed to load project: ${error.message}`);
+          }
+        }
+
+        if (button.dataset.action === "delete-project") {
+          if (!window.confirm("Remove this project from the active portfolio?")) return;
+          try {
+            await apiRequest(`/api/portfolio/projects/${id}`, { method: "DELETE" });
+            if (state.editingProjectId === Number(id)) resetProjectForm();
+            await Promise.all([loadProjects(), loadOverview()]);
+          } catch (error) {
+            alert(`Failed to remove project: ${error.message}`);
+          }
+        }
+      });
+
+      document.getElementById("services-grid").addEventListener("click", async (event) => {
+        const button = event.target.closest("button");
+        if (!button) return;
+        const id = button.dataset.id;
+        if (!id) return;
+
+        if (button.dataset.action === "edit-service") {
+          try {
+            const service = await getService(id);
+            fillServiceForm(service);
+          } catch (error) {
+            alert(`Failed to load service: ${error.message}`);
+          }
+        }
+
+        if (button.dataset.action === "delete-service") {
+          if (!window.confirm("Remove this service from the catalog?")) return;
+          try {
+            await apiRequest(`/api/services/${id}`, { method: "DELETE" });
+            if (state.editingServiceId === Number(id)) resetServiceForm();
+            await Promise.all([loadServices(), loadOverview()]);
+          } catch (error) {
+            alert(`Failed to remove service: ${error.message}`);
+          }
+        }
+      });
+
+      document.getElementById("ai-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+
+        const affectedServiceId = document.getElementById("incident-service").value;
+        const summary = document.getElementById("incident-summary").value.trim();
+        const symptoms = document.getElementById("incident-symptoms").value.trim();
+        if (!affectedServiceId || !summary || !symptoms) return;
+
+        const button = document.getElementById("generate-btn");
+        const output = document.getElementById("ai-output");
+
+        button.disabled = true;
+        button.textContent = "Analyzing...";
+        output.textContent = "Correlating service context, platform overview, and incident patterns...";
+
+        try {
+          const data = await apiRequest("/api/ai/incidents/analyze", {
+            method: "POST",
+            body: JSON.stringify({
+              affected_service_id: Number(affectedServiceId),
+              severity: document.getElementById("incident-severity").value,
+              summary,
+              symptoms,
+              recent_changes:
+                document.getElementById("incident-recent-changes").value.trim() || null,
+            }),
+          });
+          renderIncidentResult(data);
+        } catch (error) {
+          output.textContent = `AI incident analysis failed: ${error.message}`;
+        } finally {
+          button.disabled = false;
+          button.textContent = "Analyze Incident";
+        }
+      });
+
+      resetProjectForm();
+      resetServiceForm();
+      refreshPortal();
     </script>
   </body>
 </html>
