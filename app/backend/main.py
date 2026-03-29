@@ -19,6 +19,18 @@ from .models import Service as DBService
 from .models import Skill as DBSkill
 
 APP_ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+APP_VERSION = os.getenv("APP_VERSION", "2.1.0")
+BUILD_SHA = os.getenv("BUILD_SHA", "dev-local")
+IMAGE_TAG = os.getenv("IMAGE_TAG", "dev-local")
+BUILD_DATE = os.getenv("BUILD_DATE", "local")
+COMPONENT_VERSIONS = {
+    "Python": "3.11",
+    "FastAPI": "0.115.12",
+    "SQLAlchemy": "2.0.36",
+    "Alembic": "1.14.0",
+    "PostgreSQL": "15-alpine",
+    "Nginx": "1.27-alpine",
+}
 
 INCIDENT_RUNBOOKS: dict[str, dict[str, Any]] = {
     "service_unavailable": {
@@ -204,7 +216,7 @@ SERVICE_ACTION_POLICIES: dict[str, dict[str, Any]] = {
         "control_plane": False,
     },
 }
-app = FastAPI(title="DevOps Platform API", version="2.1.0")
+app = FastAPI(title="DevOps Platform API", version=APP_VERSION)
 
 app.add_middleware(
     CORSMiddleware,
@@ -337,6 +349,15 @@ class ServiceOverview(BaseModel):
     detail: str
 
 
+class BuildMetadata(BaseModel):
+    app_version: str
+    build_sha: str
+    image_tag: str
+    build_date: str
+    environment: str
+    component_versions: dict[str, str]
+
+
 class OverviewResponse(BaseModel):
     backend_status: str
     database_status: str
@@ -347,6 +368,7 @@ class OverviewResponse(BaseModel):
     healthy_service_count: int
     featured_project_count: int
     environment: str
+    build: BuildMetadata
     services: list[ServiceOverview]
 
 
@@ -570,6 +592,14 @@ def compute_overview(db: Session) -> OverviewResponse:
         .filter(DBProject.is_active.is_(True), DBProject.featured.is_(True))
         .count(),
         environment=APP_ENVIRONMENT,
+        build=BuildMetadata(
+            app_version=APP_VERSION,
+            build_sha=BUILD_SHA,
+            image_tag=IMAGE_TAG,
+            build_date=BUILD_DATE,
+            environment=APP_ENVIRONMENT,
+            component_versions=COMPONENT_VERSIONS,
+        ),
         services=services,
     )
 

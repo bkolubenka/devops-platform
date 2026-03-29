@@ -18,9 +18,7 @@ services:
       - app_network
 
   backend:
-    build:
-      context: .
-      dockerfile: app/backend/Dockerfile
+    image: ghcr.io/${GHCR_OWNER:-bkolubenka}/devops-platform-backend:${IMAGE_TAG:-main}
     container_name: backend_prod
     restart: unless-stopped
     command: sh -c "alembic -c backend/alembic.ini upgrade head && uvicorn backend.main:app --host 0.0.0.0 --port 8000"
@@ -30,6 +28,10 @@ services:
       - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/devops_platform
       - ENVIRONMENT=production
       - SECRET_KEY=${SECRET_KEY}
+      - APP_VERSION=${APP_VERSION:-2.1.0}
+      - BUILD_SHA=${BUILD_SHA:-main}
+      - IMAGE_TAG=${IMAGE_TAG:-main}
+      - BUILD_DATE=${BUILD_DATE:-unknown}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
@@ -45,9 +47,7 @@ services:
       - app_network
 
   frontend:
-    build:
-      context: .
-      dockerfile: app/frontend/Dockerfile
+    image: ghcr.io/${GHCR_OWNER:-bkolubenka}/devops-platform-frontend:${IMAGE_TAG:-main}
     container_name: frontend_prod
     restart: unless-stopped
     expose:
@@ -59,9 +59,7 @@ services:
       - app_network
 
   monitor-worker:
-    build:
-      context: .
-      dockerfile: app/backend/Dockerfile
+    image: ghcr.io/${GHCR_OWNER:-bkolubenka}/devops-platform-monitor-worker:${IMAGE_TAG:-main}
     container_name: monitor_worker_prod
     restart: unless-stopped
     command: ["python", "-m", "backend.monitor_worker"]

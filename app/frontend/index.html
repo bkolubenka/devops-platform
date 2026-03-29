@@ -355,6 +355,21 @@
         background: var(--surface-strong);
         white-space: pre-wrap;
       }
+
+      .build-footer {
+        margin-top: 28px;
+        padding-top: 22px;
+        border-top: 1px solid var(--line);
+      }
+
+      .build-footer .grid {
+        margin-top: 14px;
+      }
+
+      .footer-note {
+        margin-top: 12px;
+        font-size: 0.95rem;
+      }
     </style>
   </head>
   <body>
@@ -614,6 +629,13 @@
             </section>
           </div>
         </section>
+
+        <footer class="build-footer">
+          <p class="eyebrow">Build Metadata</p>
+          <h2>Deployment Fingerprint</h2>
+          <p>Version, build, and pinned component references for the currently running portal.</p>
+          <div id="build-footer" class="grid"></div>
+        </footer>
       </main>
     </div>
 
@@ -786,6 +808,7 @@
       async function loadOverview() {
         const metrics = document.getElementById("overview-metrics");
         const services = document.getElementById("overview-services");
+        const footer = document.getElementById("build-footer");
 
         try {
           const data = await apiRequest("/api/overview");
@@ -823,6 +846,37 @@
             </article>
           `;
 
+          const componentMarkup = Object.entries(data.build.component_versions || {})
+            .map(
+              ([name, version]) => `
+                <div class="detail-item">
+                  <span>${escapeHtml(name)}</span>
+                  <strong>${escapeHtml(version)}</strong>
+                </div>
+              `
+            )
+            .join("");
+
+          footer.innerHTML = `
+            <article class="card">
+              <div class="label">Application</div>
+              <p class="card-title">v${escapeHtml(data.build.app_version)}</p>
+              <div class="muted-row">
+                <span>Environment: ${escapeHtml(data.build.environment)}</span>
+                <span>Image tag: ${escapeHtml(data.build.image_tag)}</span>
+              </div>
+              <div class="muted-row">
+                <span>Build id: ${escapeHtml(data.build.build_sha)}</span>
+                <span>Build date: ${escapeHtml(data.build.build_date)}</span>
+              </div>
+            </article>
+            <article class="card">
+              <div class="label">Recommended Components</div>
+              <div class="detail-list">${componentMarkup}</div>
+              <p class="footer-note">These are the pinned versions this stack is intended to run against.</p>
+            </article>
+          `;
+
           if (data.services.length === 0) {
             services.innerHTML = '<div class="empty">No tracked services yet.</div>';
             return;
@@ -851,6 +905,7 @@
         } catch (error) {
           metrics.innerHTML = `<div class="empty">Failed to load overview: ${error.message}</div>`;
           services.innerHTML = "";
+          footer.innerHTML = "";
         }
       }
 

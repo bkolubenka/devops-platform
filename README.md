@@ -11,6 +11,8 @@ Containerized fullstack pet project deployed to an Ubuntu VM with Ansible, Docke
 - CRUD management for projects, services, incidents, and operational log entries
 - service-aware incident assistant with deterministic runbook guidance and incident autofill
 - monitor-worker demo service that records platform health summaries and state transitions
+- GHCR-backed production images for app services
+- build metadata footer with app version, image tag, build id, and pinned component versions
 - Nginx reverse proxy on the VM
 - Ansible-based deployment
 - GitHub Actions CI
@@ -79,6 +81,7 @@ infra/
 .github/workflows/
   ci.yml
   deploy.yml
+  publish-images.yml
 ```
 
 ## Application Routes
@@ -122,7 +125,8 @@ GitHub Actions deploy:
 - runs on a self-hosted runner installed on the VM
 - executes the Ansible playbook locally on that VM
 - is triggered manually with `workflow_dispatch`
-- updates application code on the VM via `git pull` strategy instead of Ansible file copy
+- keeps repo sync on the VM via `git pull`
+- uses `docker compose pull` + `docker compose up -d` for production app images from GHCR
 
 Branch policy:
 
@@ -142,7 +146,7 @@ Required GitHub secret:
 ## Notes
 
 - `docker-compose.dev.yaml` is the active working environment
-- `docker-compose.prod.yaml` is the production-oriented compose file and should be treated as evolving configuration
+- `docker-compose.prod.yaml` is registry-backed for backend, frontend, and monitor-worker
 - Postgres data lives in a named volume and is preserved across deploys
 - Schema and release-bound data changes should be done through Alembic migrations
 - SSL/domain configuration exists in the repo, but should be finalized only when a real domain is ready

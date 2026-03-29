@@ -1,0 +1,65 @@
+name: Publish Images
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set build metadata
+        id: meta
+        run: |
+          echo "sha_short=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+          echo "build_date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: app/backend/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/devops-platform-backend:${{ steps.meta.outputs.sha_short }}
+            ghcr.io/${{ github.repository_owner }}/devops-platform-backend:main
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: app/frontend/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/devops-platform-frontend:${{ steps.meta.outputs.sha_short }}
+            ghcr.io/${{ github.repository_owner }}/devops-platform-frontend:main
+
+      - name: Build and push monitor-worker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: app/backend/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/devops-platform-monitor-worker:${{ steps.meta.outputs.sha_short }}
+            ghcr.io/${{ github.repository_owner }}/devops-platform-monitor-worker:main
