@@ -15,14 +15,22 @@
       - python3-certbot-nginx
 
   tasks:
-    - name: Add Docker GPG key
-      apt_key:
+    - name: Ensure APT keyrings directory exists
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Install Docker APT signing key
+      get_url:
         url: https://download.docker.com/linux/ubuntu/gpg
-        state: present
+        dest: /etc/apt/keyrings/docker.asc
+        mode: "0644"
+        force: true
 
     - name: Add Docker repository
       apt_repository:
-        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
         state: present
 
     - name: Remove old Docker packages
@@ -41,11 +49,16 @@
         state: present
         update_cache: yes
 
-    - name: Start Docker
+    - name: Ensure Docker is started
       service:
         name: docker
         state: started
         enabled: true
+
+    - name: Wait for Docker socket
+      wait_for:
+        path: /var/run/docker.sock
+        timeout: 30
 
     - name: Gather service facts
       service_facts:
@@ -156,6 +169,12 @@
       register: prod_certificate_stat
       when: deploy_env == 'prod'
 
+    - name: Check for existing production runtime compose file
+      stat:
+        path: "{{ runtime_root }}/docker-compose.prod.yaml"
+      register: prod_runtime_compose_stat
+      when: deploy_env == 'prod'
+
     - name: Pull application source on server for dev
       git:
         repo: "{{ repo_url }}"
@@ -164,6 +183,15 @@
         force: true
         update: true
       when: deploy_env == 'dev'
+
+    - name: Stop existing production nginx before standalone certbot
+      command: docker compose -f docker-compose.prod.yaml stop nginx
+      args:
+        chdir: "{{ runtime_root }}"
+      when:
+        - deploy_env == 'prod'
+        - not prod_certificate_stat.stat.exists
+        - prod_runtime_compose_stat.stat.exists
 
     - name: Obtain SSL certificate for prod
       command: certbot certonly --standalone --agree-tos --email {{ ssl_email }} -d {{ domain_name }}
@@ -202,7 +230,7 @@
       when: deploy_env == 'prod'
 
     - name: Run dev docker compose build and deploy
-      command: docker compose -f {{ compose_file }} up -d --build
+      command: docker compose --env-file .env.dev -f {{ compose_file }} up -d --build
       args:
         chdir: "{{ app_dir }}"
       environment:

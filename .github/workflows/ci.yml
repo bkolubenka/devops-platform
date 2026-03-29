@@ -31,7 +31,7 @@ jobs:
           ansible-playbook --syntax-check infra/ansible/playbook.yml -i infra/ansible/inventory.ini
 
       - name: Build and start dev stack
-        run: docker compose -f docker-compose.dev.yaml up -d --build
+        run: docker compose --env-file .env.dev -f docker-compose.dev.yaml up -d --build
 
       - name: Run container smoke tests
         run: |
@@ -73,4 +73,4 @@ jobs:
 
       - name: Stop dev stack
         if: always()
-        run: docker compose -f docker-compose.dev.yaml down -v
+        run: docker compose --env-file .env.dev -f docker-compose.dev.yaml down -v

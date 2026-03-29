@@ -121,7 +121,7 @@ infra/
 ## Local Run
 
 ```bash
-docker compose -f docker-compose.dev.yaml up --build
+docker compose --env-file .env.dev -f docker-compose.dev.yaml up --build
 ```
 
 Then open:
@@ -172,12 +172,18 @@ Required GitHub secret:
 - `docker-compose.prod.yaml` is registry-backed for backend, frontend, monitor-worker, and the hidden action-runner
 - Postgres data lives in a named volume and is preserved across deploys
 - Schema and release-bound data changes should be done through Alembic migrations
+- dev startup runs `alembic upgrade head` inside the backend container; that is convenient for single-instance local work, while prod uses a separate one-shot migration step
 - Production deploys should use immutable SHA image tags rather than mutable tags like `main`
 - SSL/domain configuration exists in the repo, but should be finalized only when a real domain is ready
 
+## Security Notes
+
+- `monitor-worker` and `action-runner` mount `/var/run/docker.sock`, which gives high-privilege Docker control inside those containers
+- values in `.env.dev` are development-only defaults and must not be reused for production secrets
+
 ## Next Improvements
 
-- move hardcoded development database credentials to env files
+- move development defaults from `.env.dev` to a non-committed local env workflow
 - replace the demo AI endpoint with a real model-backed service or RAG layer
 - split Nginx config cleanly for dev vs prod
 - add targeted tests for incident autofill and service actions

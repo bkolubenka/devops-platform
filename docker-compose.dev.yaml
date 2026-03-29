@@ -4,15 +4,15 @@ services:
     container_name: devops_db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: devops_platform
-      POSTGRES_USER: devops_user
-      POSTGRES_PASSWORD: devops_password
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U devops_user -d devops_platform"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -27,14 +27,14 @@ services:
     expose:
       - "8000"
     environment:
-      - DATABASE_URL=postgresql://devops_user:devops_password@db:5432/devops_platform
-      - ENVIRONMENT=development
-      - APP_VERSION=2.1.0
-      - BUILD_SHA=dev-local
-      - IMAGE_TAG=dev-local
-      - BUILD_DATE=local-build
-      - BUILD_ID=local-run
-      - CONTAINER_REGISTRY=local-build
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      - ENVIRONMENT=${ENVIRONMENT}
+      - APP_VERSION=${APP_VERSION}
+      - BUILD_SHA=${BUILD_SHA}
+      - IMAGE_TAG=${IMAGE_TAG}
+      - BUILD_DATE=${BUILD_DATE}
+      - BUILD_ID=${BUILD_ID}
+      - CONTAINER_REGISTRY=${CONTAINER_REGISTRY}
     depends_on:
       db:
         condition: service_healthy
@@ -67,9 +67,9 @@ services:
     expose:
       - "9000"
     environment:
-      - DATABASE_URL=postgresql://devops_user:devops_password@db:5432/devops_platform
-      - ENVIRONMENT=development
-      - MONITOR_INTERVAL_SECONDS=60
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      - ENVIRONMENT=${ENVIRONMENT}
+      - MONITOR_INTERVAL_SECONDS=${MONITOR_INTERVAL_SECONDS}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
@@ -96,11 +96,11 @@ services:
     restart: unless-stopped
     command: ["python", "-m", "backend.monitor_worker"]
     environment:
-      - DATABASE_URL=postgresql://devops_user:devops_password@db:5432/devops_platform
-      - ENVIRONMENT=development
-      - MONITOR_INTERVAL_SECONDS=10
-      - MONITOR_PROBES_ENABLED=false
-      - MONITOR_HEALTH_PORT=9100
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      - ENVIRONMENT=${ENVIRONMENT}
+      - MONITOR_INTERVAL_SECONDS=${ACTION_RUNNER_INTERVAL_SECONDS}
+      - MONITOR_PROBES_ENABLED=${ACTION_RUNNER_PROBES_ENABLED}
+      - MONITOR_HEALTH_PORT=${ACTION_RUNNER_HEALTH_PORT}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
