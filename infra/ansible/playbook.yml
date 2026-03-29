@@ -30,26 +30,47 @@
         src: ../../
         dest: /home/make/apps/devops-platform
 
+    - name: Gather service facts
+      service_facts:
+
+    - name: Stop and disable system nginx when present
+      service:
+        name: nginx
+        state: stopped
+        enabled: false
+      when: "'nginx.service' in ansible_facts.services"
+
     - name: Stop existing docker compose stack
       command: docker-compose -f docker-compose.dev.yaml down --remove-orphans
       args:
         chdir: /home/make/apps/devops-platform
       failed_when: false
 
+    - name: Check whether host port 80 is already in use
+      command: ss -ltnp sport = :80
+      register: port_80_check
+      changed_when: false
+      failed_when: false
+
+    - name: Fail when host port 80 is occupied by another process
+      fail:
+        msg: "Port 80 is already in use on the VM. Free it before deploy or change nginx mapping to another host port. Details: {{ port_80_check.stdout | default('unknown process') }}"
+      when: port_80_check.stdout is search(':80')
+
     - name: Run docker compose
       command: docker-compose -f docker-compose.dev.yaml up -d --build
       args:
         chdir: /home/make/apps/devops-platform
 
-    - name: Wait for backend port
+    - name: Wait for nginx port
       wait_for:
         host: 127.0.0.1
-        port: 8000
+        port: 80
         timeout: 60
 
-    - name: Verify backend health endpoint
+    - name: Verify backend health endpoint via nginx
       uri:
-        url: http://127.0.0.1:8000/health
+        url: http://127.0.0.1/health
         method: GET
         status_code: 200
       register: backend_health
