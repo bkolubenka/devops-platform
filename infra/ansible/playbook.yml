@@ -3,17 +3,19 @@
   become: true
 
   vars:
-    docker_packages:
-      - git
+    common_packages:
       - docker.io
       - docker-compose
+    dev_packages:
+      - git
+    prod_packages:
       - certbot
       - python3-certbot-nginx
 
   tasks:
     - name: Install required packages
       apt:
-        name: "{{ docker_packages }}"
+        name: "{{ common_packages + (dev_packages if deploy_env == 'dev' else prod_packages) }}"
         state: present
         update_cache: yes
 
@@ -22,24 +24,6 @@
         name: docker
         state: started
         enabled: true
-
-    - name: Create app base directory
-      file:
-        path: "{{ app_base_dir }}"
-        state: directory
-
-    - name: Pull application source on server
-      git:
-        repo: "{{ repo_url }}"
-        dest: "{{ app_dir }}"
-        version: "{{ repo_version }}"
-        force: true
-        update: true
-
-    - name: Create SSL directory
-      file:
-        path: "{{ app_dir }}/ssl"
-        state: directory
 
     - name: Gather service facts
       service_facts:
@@ -51,85 +35,202 @@
         enabled: false
       when: "'nginx.service' in ansible_facts.services"
 
-    - name: Stop existing docker compose stack
-      command: docker-compose -f {{ compose_file }} down --remove-orphans
+    - name: Set default effective release metadata
+      set_fact:
+        effective_image_tag: "{{ image_tag }}"
+        effective_app_version: "{{ app_version }}"
+        effective_build_sha: "{{ build_sha }}"
+        effective_build_date: "{{ build_date }}"
+        effective_build_id: "{{ build_id }}"
+        effective_container_registry: "{{ container_registry }}"
+
+    - name: Ensure dev application directory exists
+      file:
+        path: "{{ app_base_dir }}"
+        state: directory
+      when: deploy_env == 'dev'
+
+    - name: Ensure prod runtime directories exist
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ runtime_root }}"
+        - "{{ runtime_release_dir }}"
+        - "{{ runtime_root }}/ssl"
+      when: deploy_env == 'prod'
+
+    - name: Check for current release metadata
+      stat:
+        path: "{{ runtime_current_release_file }}"
+      register: current_release_stat
+      when: deploy_env == 'prod'
+
+    - name: Check for previous release metadata
+      stat:
+        path: "{{ runtime_previous_release_file }}"
+      register: previous_release_stat
+      when: deploy_env == 'prod'
+
+    - name: Read current release metadata
+      slurp:
+        path: "{{ runtime_current_release_file }}"
+      register: current_release_raw
+      when: deploy_env == 'prod' and current_release_stat.stat.exists
+
+    - name: Parse previous release metadata for rollback
+      shell: |
+        set -a
+        . "{{ runtime_previous_release_file }}"
+        python3 - <<'PY'
+        import json
+        import os
+        print(json.dumps({
+            "IMAGE_TAG": os.environ.get("IMAGE_TAG"),
+            "APP_VERSION": os.environ.get("APP_VERSION"),
+            "BUILD_SHA": os.environ.get("BUILD_SHA"),
+            "BUILD_DATE": os.environ.get("BUILD_DATE"),
+            "BUILD_ID": os.environ.get("BUILD_ID"),
+            "CONTAINER_REGISTRY": os.environ.get("CONTAINER_REGISTRY"),
+        }))
+        PY
       args:
-        chdir: "{{ app_dir }}"
-      failed_when: false
-
-    - name: Stop all containers using port 80
-      shell: docker ps -q --filter "publish=80" | xargs -r docker stop
-      failed_when: false
-
-    - name: Remove stopped containers
-      command: docker container prune -f
-      failed_when: false
-
-    - name: Check whether nginx host port is already in use
-      command: ss -ltnp sport = :{{ nginx_host_port }}
-      register: port_80_check
+        executable: /bin/bash
+      register: previous_release_meta
       changed_when: false
-      failed_when: false
+      when: deploy_env == 'prod' and rollback_to_previous and previous_release_stat.stat.exists
 
-    - name: Fail when nginx host port is occupied by another process
+    - name: Fail when rollback target is unavailable
       fail:
-        msg: "Port {{ nginx_host_port }} is already in use on the VM. Free it before deploy or change the nginx mapping. Details: {{ port_80_check.stdout | default('unknown process') }}"
-      when: port_80_check.stdout is search(':' ~ nginx_host_port)
+        msg: "Rollback requested, but {{ runtime_previous_release_file }} does not exist."
+      when: deploy_env == 'prod' and rollback_to_previous and not previous_release_stat.stat.exists
+
+    - name: Override effective metadata from previous release
+      set_fact:
+        effective_image_tag: "{{ (previous_release_meta.stdout | from_json).IMAGE_TAG }}"
+        effective_app_version: "{{ (previous_release_meta.stdout | from_json).APP_VERSION }}"
+        effective_build_sha: "{{ (previous_release_meta.stdout | from_json).BUILD_SHA }}"
+        effective_build_date: "{{ (previous_release_meta.stdout | from_json).BUILD_DATE }}"
+        effective_build_id: "{{ (previous_release_meta.stdout | from_json).BUILD_ID }}"
+        effective_container_registry: "{{ (previous_release_meta.stdout | from_json).CONTAINER_REGISTRY }}"
+      when: deploy_env == 'prod' and rollback_to_previous
+
+    - name: Enforce immutable SHA-tagged production deploys
+      fail:
+        msg: "Production deploys must use an immutable SHA image tag, not '{{ effective_image_tag }}'."
+      when:
+        - deploy_env == 'prod'
+        - effective_image_tag == 'main' or effective_image_tag is not match('^[0-9a-f]{7,40}$')
 
     - name: Require real production domain settings
       fail:
         msg: "Set domain_name and ssl_email to real production values before deploying prod."
       when: deploy_env == 'prod' and (domain_name == 'yourdomain.com' or ssl_email == 'admin@yourdomain.com')
 
-    # SSL Certificate setup for production
-    - name: Obtain SSL certificate (production only)
-      command: certbot certonly --standalone --agree-tos --email {{ ssl_email }} -d {{ domain_name }}
+    - name: Check for existing production certificate
+      stat:
+        path: "/etc/letsencrypt/live/{{ domain_name }}/fullchain.pem"
+      register: prod_certificate_stat
       when: deploy_env == 'prod'
 
-    - name: Copy SSL certificates to app directory
+    - name: Pull application source on server for dev
+      git:
+        repo: "{{ repo_url }}"
+        dest: "{{ app_dir }}"
+        version: "{{ repo_version }}"
+        force: true
+        update: true
+      when: deploy_env == 'dev'
+
+    - name: Obtain SSL certificate for prod
+      command: certbot certonly --standalone --agree-tos --email {{ ssl_email }} -d {{ domain_name }}
+      when: deploy_env == 'prod' and not prod_certificate_stat.stat.exists
+
+    - name: Copy SSL certificates into runtime directory
       copy:
         src: "/etc/letsencrypt/live/{{ domain_name }}/{{ item }}"
-        dest: "{{ app_dir }}/ssl/{{ item }}"
+        dest: "{{ runtime_root }}/ssl/{{ item }}"
         remote_src: yes
-      with_items:
+        mode: "0600"
+      loop:
         - fullchain.pem
         - privkey.pem
       when: deploy_env == 'prod'
 
-    - name: Run docker compose
-      command: >-
-        docker-compose -f {{ compose_file }}
-        {% if deploy_env == 'prod' %}pull{% else %}up -d --build{% endif %}
-      args:
-        chdir: "{{ app_dir }}"
-      environment:
-        GHCR_OWNER: "{{ ghcr_owner }}"
-        IMAGE_TAG: "{{ image_tag }}"
-        APP_VERSION: "{{ app_version }}"
-        BUILD_SHA: "{{ build_sha }}"
-        BUILD_DATE: "{{ build_date }}"
-        BUILD_ID: "{{ build_id }}"
-        CONTAINER_REGISTRY: "{{ container_registry }}"
+    - name: Render prod runtime compose file
+      template:
+        src: docker-compose.prod.yaml.j2
+        dest: "{{ runtime_root }}/docker-compose.prod.yaml"
+        mode: "0644"
+      when: deploy_env == 'prod'
 
-    - name: Start docker compose stack for production
-      command: docker-compose -f {{ compose_file }} up -d
+    - name: Render prod nginx config
+      template:
+        src: prod.conf.j2
+        dest: "{{ runtime_root }}/prod.conf"
+        mode: "0644"
+      when: deploy_env == 'prod'
+
+    - name: Render prod runtime env file
+      template:
+        src: prod.env.j2
+        dest: "{{ runtime_env_file }}"
+        mode: "0600"
+      when: deploy_env == 'prod'
+
+    - name: Run dev docker compose build and deploy
+      command: docker-compose -f {{ compose_file }} up -d --build
       args:
         chdir: "{{ app_dir }}"
       environment:
         GHCR_OWNER: "{{ ghcr_owner }}"
-        IMAGE_TAG: "{{ image_tag }}"
-        APP_VERSION: "{{ app_version }}"
-        BUILD_SHA: "{{ build_sha }}"
-        BUILD_DATE: "{{ build_date }}"
-        BUILD_ID: "{{ build_id }}"
-        CONTAINER_REGISTRY: "{{ container_registry }}"
+        IMAGE_TAG: "{{ effective_image_tag }}"
+        APP_VERSION: "{{ effective_app_version }}"
+        BUILD_SHA: "{{ effective_build_sha }}"
+        BUILD_DATE: "{{ effective_build_date }}"
+        BUILD_ID: "{{ effective_build_id }}"
+        CONTAINER_REGISTRY: "{{ effective_container_registry }}"
+      when: deploy_env == 'dev'
+
+    - name: Pull production images
+      command: docker-compose -f docker-compose.prod.yaml pull
+      args:
+        chdir: "{{ runtime_root }}"
+      when: deploy_env == 'prod'
+
+    - name: Start only the production database
+      command: docker-compose -f docker-compose.prod.yaml up -d db
+      args:
+        chdir: "{{ runtime_root }}"
+      when: deploy_env == 'prod'
+
+    - name: Wait for production database container health
+      shell: docker inspect --format='{{ "{{" }} .State.Health.Status {{ "}}" }}' devops_db_prod
+      register: prod_db_health
+      retries: 20
+      delay: 3
+      changed_when: false
+      until: prod_db_health.stdout == "healthy"
+      when: deploy_env == 'prod'
+
+    - name: Run one-shot production database migration
+      shell: docker-compose -f docker-compose.prod.yaml run --rm backend alembic -c backend/alembic.ini upgrade head
+      args:
+        chdir: "{{ runtime_root }}"
+      when: deploy_env == 'prod'
+
+    - name: Start production stack without destructive teardown
+      command: docker-compose -f docker-compose.prod.yaml up -d
+      args:
+        chdir: "{{ runtime_root }}"
       when: deploy_env == 'prod'
 
     - name: Wait for nginx port
       wait_for:
         host: 127.0.0.1
         port: "{{ nginx_host_port }}"
-        timeout: 60
+        timeout: 90
 
     - name: Verify backend health endpoint via nginx
       uri:
@@ -137,14 +238,28 @@
         method: GET
         status_code: 200
       register: backend_health
-      retries: 10
-      delay: 3
+      retries: 15
+      delay: 4
       until: backend_health.json.status == "ok"
+
+    - name: Update previous release metadata after successful deploy
+      copy:
+        content: "{{ current_release_raw.content | b64decode }}"
+        dest: "{{ runtime_previous_release_file }}"
+        mode: "0600"
+      when: deploy_env == 'prod' and current_release_stat.stat.exists
+
+    - name: Record current release metadata
+      template:
+        src: release.env.j2
+        dest: "{{ runtime_current_release_file }}"
+        mode: "0600"
+      when: deploy_env == 'prod'
 
     - name: Setup SSL renewal cron job
       cron:
         name: "SSL certificate renewal"
         minute: "0"
         hour: "12"
-        job: "certbot renew --quiet && docker-compose -f {{ app_dir }}/{{ compose_file }} restart nginx"
+        job: "certbot renew --quiet && docker-compose -f {{ runtime_root }}/docker-compose.prod.yaml restart nginx"
       when: deploy_env == 'prod'

@@ -8,12 +8,15 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
+import docker
 from sqlalchemy import desc
 
 from .database import SessionLocal
 from .main import (
     DBIncident,
+    DBServiceActionJob,
     DBService,
+    SERVICE_ACTION_POLICIES,
     build_service_overview,
     compute_overview,
     record_incident_entry,
@@ -22,7 +25,134 @@ from .main import (
 MONITOR_INTERVAL_SECONDS = int(os.getenv("MONITOR_INTERVAL_SECONDS", "60"))
 MONITOR_HEALTH_HOST = os.getenv("MONITOR_HEALTH_HOST", "0.0.0.0")
 MONITOR_HEALTH_PORT = int(os.getenv("MONITOR_HEALTH_PORT", "9000"))
+MONITOR_PROBES_ENABLED = os.getenv("MONITOR_PROBES_ENABLED", "true").lower() == "true"
 MONITOR_SOURCE = "monitor-worker"
+
+
+def process_pending_action_jobs(db_session) -> None:
+    pending_jobs = (
+        db_session.query(DBServiceActionJob)
+        .filter(DBServiceActionJob.status == "pending")
+        .order_by(DBServiceActionJob.id.asc())
+        .all()
+    )
+    if not pending_jobs:
+        return
+
+    client = docker.from_env()
+    try:
+        for job in pending_jobs:
+            service = (
+                db_session.query(DBService)
+                .filter(DBService.id == job.service_id, DBService.is_active.is_(True))
+                .first()
+            )
+            if not service:
+                job.status = "failed"
+                job.error_detail = "Service not found or inactive."
+                job.completed_at = datetime.utcnow()
+                db_session.commit()
+                continue
+
+            policy = SERVICE_ACTION_POLICIES.get(service.name)
+            if not policy or job.action not in policy["allowed_actions"]:
+                job.status = "failed"
+                job.error_detail = "Action is not permitted for this service."
+                job.completed_at = datetime.utcnow()
+                db_session.commit()
+                continue
+
+            runtime_target = service.runtime_target or policy["runtime_target"]
+            job.status = "running"
+            job.started_at = datetime.utcnow()
+            db_session.commit()
+
+            try:
+                container = client.containers.get(runtime_target)
+                if job.action == "restart":
+                    container.restart(timeout=10)
+                    service.status = "running"
+                elif job.action == "start":
+                    container.start()
+                    service.status = "running"
+                elif job.action == "stop":
+                    container.stop(timeout=10)
+                    service.status = "stopped"
+
+                job.status = "completed"
+                job.result_detail = f"{job.action} executed for runtime target '{runtime_target}'."
+                job.completed_at = datetime.utcnow()
+                db_session.commit()
+
+                record_incident_entry(
+                    db_session,
+                    title=f"{service.name} {job.action} completed",
+                    affected_service_id=service.id,
+                    severity="low",
+                    summary=f"monitor-worker executed {job.action} for {service.name}.",
+                    symptoms="A queued service action completed successfully.",
+                    recent_changes=f"Runtime target: {runtime_target}",
+                    status="resolved",
+                    source="service-action",
+                    event_type=f"service_{job.action}",
+                    overview_snapshot=compute_overview(db_session).model_dump(),
+                    analysis={
+                        "job_id": job.id,
+                        "action": job.action,
+                        "runtime_target": runtime_target,
+                        "result": "success",
+                    },
+                )
+            except docker.errors.NotFound:
+                job.status = "failed"
+                job.error_detail = f"Container '{runtime_target}' was not found."
+                job.completed_at = datetime.utcnow()
+                db_session.commit()
+                record_incident_entry(
+                    db_session,
+                    title=f"{service.name} {job.action} failed",
+                    affected_service_id=service.id,
+                    severity="high",
+                    summary=f"monitor-worker could not find container '{runtime_target}' for {service.name}.",
+                    symptoms="Docker reported that the target container was missing.",
+                    recent_changes=f"Queued service action job {job.id}.",
+                    status="open",
+                    source="service-action",
+                    event_type=f"service_{job.action}_failed",
+                    overview_snapshot=compute_overview(db_session).model_dump(),
+                    analysis={
+                        "job_id": job.id,
+                        "action": job.action,
+                        "runtime_target": runtime_target,
+                        "result": "container-not-found",
+                    },
+                )
+            except docker.errors.DockerException as exc:
+                job.status = "failed"
+                job.error_detail = str(exc)
+                job.completed_at = datetime.utcnow()
+                db_session.commit()
+                record_incident_entry(
+                    db_session,
+                    title=f"{service.name} {job.action} failed",
+                    affected_service_id=service.id,
+                    severity="high",
+                    summary=f"monitor-worker could not execute {job.action} for {service.name}.",
+                    symptoms=str(exc),
+                    recent_changes=f"Queued service action job {job.id}.",
+                    status="open",
+                    source="service-action",
+                    event_type=f"service_{job.action}_failed",
+                    overview_snapshot=compute_overview(db_session).model_dump(),
+                    analysis={
+                        "job_id": job.id,
+                        "action": job.action,
+                        "runtime_target": runtime_target,
+                        "result": "docker-error",
+                    },
+                )
+    finally:
+        client.close()
 
 
 class MonitorHealthHandler(BaseHTTPRequestHandler):
@@ -191,9 +321,12 @@ def log_change_events(db_session, previous_states: dict[str, dict[str, Any]], cu
         )
 
 
-def monitor_once() -> None:
+def monitor_once(enable_probes: bool = True) -> None:
     db_session = SessionLocal()
     try:
+        process_pending_action_jobs(db_session)
+        if not enable_probes:
+            return
         current_states = build_service_states(db_session)
         previous_snapshot, previous_states = load_previous_states(db_session)
         if not previous_snapshot:
@@ -226,7 +359,7 @@ def main() -> None:
 
     try:
         while not stop_event.is_set():
-            monitor_once()
+            monitor_once(enable_probes=MONITOR_PROBES_ENABLED)
             stop_event.wait(MONITOR_INTERVAL_SECONDS)
     finally:
         stop_event.set()

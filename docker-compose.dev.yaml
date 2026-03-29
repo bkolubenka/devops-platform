@@ -35,8 +35,6 @@ services:
       - BUILD_DATE=local-build
       - BUILD_ID=local-run
       - CONTAINER_REGISTRY=local-build
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       db:
         condition: service_healthy
@@ -72,6 +70,8 @@ services:
       - DATABASE_URL=postgresql://devops_user:devops_password@db:5432/devops_platform
       - ENVIRONMENT=development
       - MONITOR_INTERVAL_SECONDS=60
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       db:
         condition: service_healthy
@@ -87,6 +87,27 @@ services:
       timeout: 10s
       retries: 3
       start_period: 20s
+
+  action-runner:
+    build:
+      context: .
+      dockerfile: app/backend/Dockerfile
+    container_name: action_runner
+    restart: unless-stopped
+    command: ["python", "-m", "backend.monitor_worker"]
+    environment:
+      - DATABASE_URL=postgresql://devops_user:devops_password@db:5432/devops_platform
+      - ENVIRONMENT=development
+      - MONITOR_INTERVAL_SECONDS=10
+      - MONITOR_PROBES_ENABLED=false
+      - MONITOR_HEALTH_PORT=9100
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
 
   nginx:
     image: nginx:1.27-alpine

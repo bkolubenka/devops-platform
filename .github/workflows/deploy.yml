@@ -16,6 +16,11 @@ on:
         required: true
         default: main
         type: string
+      rollback_to_previous:
+        description: "Rollback prod to the previous recorded release"
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -45,6 +50,20 @@ jobs:
         id: deploy_meta
         run: |
           echo "build_date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+
+      - name: Validate production deploy contract
+        if: ${{ inputs.deploy_env == 'prod' }}
+        run: |
+          if [ "${{ inputs.rollback_to_previous }}" = "false" ]; then
+            if [ "${{ inputs.image_tag }}" = "main" ]; then
+              echo "Production deploys must use an immutable SHA tag, not 'main'."
+              exit 1
+            fi
+            if ! echo "${{ inputs.image_tag }}" | grep -Eq '^[0-9a-f]{7,40}$'; then
+              echo "Production deploys must use a SHA-like image tag."
+              exit 1
+            fi
+          fi
 
       - name: Log in to GHCR for production deploys
         if: ${{ inputs.deploy_env == 'prod' }}
@@ -81,6 +100,10 @@ jobs:
           DEPLOY_BUILD_DATE: ${{ steps.deploy_meta.outputs.build_date }}
           DEPLOY_BUILD_ID: ${{ github.run_id }}-${{ github.run_attempt }}
           DEPLOY_CONTAINER_REGISTRY: ghcr.io/${{ github.repository_owner }}
+          DEPLOY_ROLLBACK_TO_PREVIOUS: ${{ inputs.rollback_to_previous }}
+          DEPLOY_DB_USER: devops_user
+          DEPLOY_DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DEPLOY_SECRET_KEY: ${{ secrets.SECRET_KEY }}
         run: |
           ANSIBLE_LOCAL_TEMP=/tmp/.ansible/tmp \
           ansible-playbook \

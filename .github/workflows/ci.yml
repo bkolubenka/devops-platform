@@ -23,7 +23,7 @@ jobs:
           pip install ansible
 
       - name: Validate backend syntax
-        run: python -m py_compile app/backend/main.py app/backend/database.py app/backend/models.py
+        run: python -m py_compile app/backend/main.py app/backend/database.py app/backend/models.py app/backend/monitor_worker.py
 
       - name: Validate Ansible playbook syntax
         run: |

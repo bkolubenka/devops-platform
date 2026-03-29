@@ -11,6 +11,7 @@ Containerized fullstack pet project deployed to an Ubuntu VM with Ansible, Docke
 - CRUD management for projects, services, incidents, and operational log entries
 - service-aware incident assistant with deterministic runbook guidance and incident autofill
 - monitor-worker demo service that records platform health summaries and state transitions
+- worker-mediated service actions so the API queues intent and a separate runner executes it
 - GHCR-backed production images for app services
 - build metadata footer with app version, image tag, build id, and pinned component versions
 - Nginx reverse proxy on the VM
@@ -36,6 +37,7 @@ Nginx
 ```
 
 - `monitor-worker` is a separate demo worker container that records operational log sweeps and incident history.
+- `action-runner` is a hidden executor container that processes queued service-action jobs so the API never talks to Docker directly.
 
 ## Tech Stack
 
@@ -94,6 +96,7 @@ infra/
 - `/api/portfolio/skills`
 - `/api/services`
 - `/api/services/{id}/actions`
+- `/api/service-action-jobs`
 - `/api/incidents`
 - `/api/incidents/{id}`
 - `/api/ai/incidents/analyze`
@@ -125,8 +128,10 @@ GitHub Actions deploy:
 - runs on a self-hosted runner installed on the VM
 - executes the Ansible playbook locally on that VM
 - is triggered manually with `workflow_dispatch`
-- keeps repo sync on the VM via `git pull`
-- uses `docker compose pull` + `docker compose up -d` for production app images from GHCR
+- keeps dev source-based and repo-synced on the VM
+- renders prod runtime files under `/opt/devops-platform`
+- pulls GHCR app images for prod and deploys them without destructive `down/prune` steps
+- records `current_release.env` and `previous_release.env` on the server for rollback metadata
 
 Branch policy:
 
@@ -136,19 +141,23 @@ Branch policy:
 Required GitHub secret:
 
 - `BECOME_PASSWORD`
+- `DB_PASSWORD`
+- `SECRET_KEY`
 
 ## Operational Flow
 
 - `monitor-worker` runs every minute and records health summaries or service-state changes in the incident log
+- the API queues service-action intent, and `action-runner` executes allowed actions asynchronously
 - service action outcomes are written back to the same log so the AI assistant can reuse them later
 - logged incidents or events can be selected in the Incident Assistant to autofill the form, but manual analysis still works without a selection
 
 ## Notes
 
 - `docker-compose.dev.yaml` is the active working environment
-- `docker-compose.prod.yaml` is registry-backed for backend, frontend, and monitor-worker
+- `docker-compose.prod.yaml` is registry-backed for backend, frontend, monitor-worker, and the hidden action-runner
 - Postgres data lives in a named volume and is preserved across deploys
 - Schema and release-bound data changes should be done through Alembic migrations
+- Production deploys should use immutable SHA image tags rather than mutable tags like `main`
 - SSL/domain configuration exists in the repo, but should be finalized only when a real domain is ready
 
 ## Next Improvements
