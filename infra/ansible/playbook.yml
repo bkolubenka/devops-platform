@@ -97,9 +97,29 @@
       when: deploy_env == 'prod'
 
     - name: Run docker compose
-      command: docker-compose -f {{ compose_file }} up -d --build
+      command: >-
+        docker-compose -f {{ compose_file }}
+        {% if deploy_env == 'prod' %}pull{% else %}up -d --build{% endif %}
       args:
         chdir: "{{ app_dir }}"
+      environment:
+        GHCR_OWNER: "{{ ghcr_owner }}"
+        IMAGE_TAG: "{{ image_tag }}"
+        APP_VERSION: "{{ app_version }}"
+        BUILD_SHA: "{{ build_sha }}"
+        BUILD_DATE: "{{ build_date }}"
+
+    - name: Start docker compose stack for production
+      command: docker-compose -f {{ compose_file }} up -d
+      args:
+        chdir: "{{ app_dir }}"
+      environment:
+        GHCR_OWNER: "{{ ghcr_owner }}"
+        IMAGE_TAG: "{{ image_tag }}"
+        APP_VERSION: "{{ app_version }}"
+        BUILD_SHA: "{{ build_sha }}"
+        BUILD_DATE: "{{ build_date }}"
+      when: deploy_env == 'prod'
 
     - name: Wait for nginx port
       wait_for:

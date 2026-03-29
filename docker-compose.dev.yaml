@@ -29,6 +29,10 @@ services:
     environment:
       - DATABASE_URL=postgresql://devops_user:devops_password@db:5432/devops_platform
       - ENVIRONMENT=development
+      - APP_VERSION=2.1.0
+      - BUILD_SHA=dev-local
+      - IMAGE_TAG=dev-local
+      - BUILD_DATE=local-build
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
