@@ -159,10 +159,10 @@
 
     - name: Enforce immutable SHA-tagged production deploys
       fail:
-        msg: "Production deploys must use an immutable SHA image tag, not '{{ effective_image_tag }}'."
+        msg: "Production deploys must use the published 12-character SHA image tag, not '{{ effective_image_tag }}'."
       when:
         - deploy_env == 'prod'
-        - effective_image_tag == 'main' or effective_image_tag is not match('^[0-9a-f]{7,40}$')
+        - effective_image_tag == 'main' or effective_image_tag is not match('^[0-9a-f]{12}$')
 
     - name: Require real production domain settings
       fail:
@@ -180,6 +180,31 @@
         path: "{{ runtime_root }}/docker-compose.prod.yaml"
       register: prod_runtime_compose_stat
       when: deploy_env == 'prod'
+
+    - name: Resolve production domains to IPv4 addresses
+      shell: |
+        python3 - <<'PY'
+        import socket
+        domain = "{{ item }}"
+        ips = sorted({row[4][0] for row in socket.getaddrinfo(domain, 80, socket.AF_INET, socket.SOCK_STREAM)})
+        print(" ".join(ips))
+        PY
+      args:
+        executable: /bin/bash
+      register: resolved_domain_ipv4
+      changed_when: false
+      loop:
+        - "{{ domain_name }}"
+        - "{{ test_domain }}"
+      when: deploy_env == 'prod' and not prod_certificate_stat.stat.exists
+
+    - name: Validate domains point directly to origin before certbot
+      assert:
+        that:
+          - vps_public_ip in (item.stdout.split())
+        fail_msg: "Domain {{ item.item }} resolves to {{ item.stdout | default('none') }}, but expected {{ vps_public_ip }}. Set DNS A records to point directly to the VPS IP before certbot standalone."
+      loop: "{{ resolved_domain_ipv4.results }}"
+      when: deploy_env == 'prod' and not prod_certificate_stat.stat.exists
 
     - name: Validate dev repo_url is not a placeholder
       assert:
@@ -212,17 +237,58 @@
         update: true
       when: deploy_env == 'dev'
 
-    - name: Stop existing production nginx before standalone certbot
-      command: docker compose -f docker-compose.prod.yaml stop nginx
-      args:
-        chdir: "{{ runtime_root }}"
-      when:
-        - deploy_env == 'prod'
-        - not prod_certificate_stat.stat.exists
-        - prod_runtime_compose_stat.stat.exists
-
     - name: Obtain SSL certificate for prod
-      command: certbot certonly --standalone --agree-tos --email {{ ssl_email }} -d {{ domain_name }}
+      block:
+        - name: Stop containers publishing port 80 before standalone certbot
+          shell: |
+            set -e
+            ids=$(docker ps --filter "publish=80" --format '{{ "{{" }}.ID{{ "}}" }}')
+            if [ -n "$ids" ]; then
+              docker stop $ids
+            fi
+            echo "$ids"
+          args:
+            executable: /bin/bash
+          register: nginx_stop_for_certbot
+          changed_when: "(nginx_stop_for_certbot.stdout | trim) != ''"
+
+        - name: Ensure port 80 is free before certbot standalone
+          shell: |
+            set -e
+            ss -ltn '( sport = :80 )' | tail -n +2
+          args:
+            executable: /bin/bash
+          register: port80_listeners
+          changed_when: false
+
+        - name: Fail when port 80 is still occupied before certbot
+          fail:
+            msg: "Port 80 is still in use before certbot standalone. Active listeners: {{ port80_listeners.stdout | default('none') }}"
+          when: (port80_listeners.stdout | trim) != ''
+
+        - name: Request certbot certificate for domain and www
+          command: certbot certonly --standalone --non-interactive --agree-tos --preferred-challenges http --http-01-address {{ vps_public_ip }} --http-01-port 80 --email {{ ssl_email }} -d {{ domain_name }} -d {{ test_domain }} -v
+      rescue:
+        - name: Read letsencrypt log tail after certbot failure
+          command: tail -n 80 /var/log/letsencrypt/letsencrypt.log
+          register: certbot_log_tail
+          changed_when: false
+          failed_when: false
+
+        - name: Fail with detailed certbot diagnostics
+          fail:
+            msg: "Certbot challenge failed. Check DNS A records are DNS-only and reachable on port 80. Log tail: {{ certbot_log_tail.stdout | default('no log output available') }}"
+      always:
+        - name: Restore nginx containers stopped for certbot
+          shell: |
+            set -e
+            ids="{{ nginx_stop_for_certbot.stdout | default('') | trim }}"
+            if [ -n "$ids" ]; then
+              docker start $ids
+            fi
+          args:
+            executable: /bin/bash
+          changed_when: false
       when: deploy_env == 'prod' and not prod_certificate_stat.stat.exists
 
     - name: Copy SSL certificates into runtime directory
@@ -270,6 +336,32 @@
         BUILD_ID: "{{ effective_build_id }}"
         CONTAINER_REGISTRY: "{{ effective_container_registry }}"
       when: deploy_env == 'dev'
+
+    - name: Restart dev nginx to refresh upstream targets
+      command: docker compose --env-file .env.dev -f {{ compose_file }} restart nginx
+      args:
+        chdir: "{{ app_dir }}"
+      when: deploy_env == 'dev'
+
+    - name: Verify production image tags exist in GHCR
+      shell: docker manifest inspect ghcr.io/{{ ghcr_owner }}/devops-platform-{{ item }}:{{ effective_image_tag }} >/dev/null
+      args:
+        executable: /bin/bash
+      register: ghcr_image_manifest_checks
+      changed_when: false
+      failed_when: false
+      loop:
+        - backend
+        - frontend
+        - monitor-worker
+      when: deploy_env == 'prod'
+
+    - name: Fail when production image tag is not published to GHCR
+      fail:
+        msg: "Missing GHCR image tag '{{ effective_image_tag }}' for: {{ ghcr_image_manifest_checks.results | selectattr('rc', 'ne', 0) | map(attribute='item') | join(', ') }}. Publish images from main and use the published sha_short tag."
+      when:
+        - deploy_env == 'prod'
+        - (ghcr_image_manifest_checks.results | selectattr('rc', 'ne', 0) | list | length) > 0
 
     - name: Pull production images
       command: docker compose -f docker-compose.prod.yaml pull

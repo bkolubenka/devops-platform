@@ -138,11 +138,45 @@ Manual deploy:
 DEPLOY_ENV=dev DEPLOY_REPO_REF=main ansible-playbook -i infra/ansible/inventory.ini infra/ansible/playbook.yml --ask-become-pass
 ```
 
+Canonical commands (current inventory groups):
+
+```bash
+# Dev deploy to VPS host group
+DEPLOY_ENV=dev ansible-playbook -i infra/ansible/inventory.ini infra/ansible/playbook.yml --limit vps --ask-become-pass -e "repo_url=https://github.com/bkolubenka/devops-platform.git repo_version=main"
+
+# Dev deploy to VM host group
+DEPLOY_ENV=dev ansible-playbook -i infra/ansible/inventory.ini infra/ansible/playbook.yml --limit vm --ask-become-pass
+
+# Prod deploy to VPS host group (use published 12-char SHA image tag)
+DEPLOY_ENV=prod DEPLOY_IMAGE_TAG=<sha12> DEPLOY_DB_PASSWORD=<db_password> DEPLOY_SECRET_KEY=<secret_key> ansible-playbook -i infra/ansible/inventory.ini infra/ansible/playbook.yml --limit vps --ask-become-pass
+```
+
+Notes:
+
+- `repo_url` already has a safe default in `infra/ansible/group_vars/all.yml`; pass `-e repo_url=...` only when overriding it for a specific run.
+- Do not use placeholder URLs like `https://github.com/your/repo.git`.
+- For prod, `DEPLOY_IMAGE_TAG` must match the published GHCR tag format (`^[0-9a-f]{12}$`).
+- The prod tag must come from a successful `Publish Images` run on `main` (the workflow `sha_short` output).
+
+Cloudflare SSL rollout (recommended):
+
+1. Point DNS `A` records for `@` and `www` to the VPS IP.
+2. Keep records as `DNS only` for initial origin certificate issuance.
+3. Run production Ansible deploy with real `domain_name` and `ssl_email` so certbot can issue certificates on the VM.
+4. After origin cert is active, switch Cloudflare SSL/TLS mode to `Full (strict)`.
+5. Enable Cloudflare proxy (`Proxied`) after end-to-end HTTPS is confirmed.
+
+Temporary mode note:
+
+- `Flexible` can be used during DNS bring-up, but it is not end-to-end TLS and should not be the final mode.
+
 GitHub Actions deploy:
 
 - runs on a self-hosted runner installed on the VM
 - executes the Ansible playbook locally on that VM
 - is triggered manually with `workflow_dispatch`
+- also supports automatic prod deploy after successful `Publish Images` on `main`
+- auto deploy uses the published commit SHA (short tag) as the production image tag
 - keeps dev source-based and repo-synced on the VM
 - renders prod runtime files under `/opt/devops-platform`
 - pulls GHCR app images for prod and deploys them without destructive `down/prune` steps
