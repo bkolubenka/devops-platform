@@ -179,6 +179,12 @@
         mode: "0600"
       when: deploy_env == 'prod'
 
+    - name: Stop existing dev containers
+      command: docker-compose -f {{ compose_file }} down
+      args:
+        chdir: "{{ app_dir }}"
+      when: deploy_env == 'dev' and force_clean_dev
+
     - name: Run dev docker compose build and deploy
       command: docker-compose -f {{ compose_file }} up -d --build --force-recreate
       args:
