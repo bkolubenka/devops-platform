@@ -513,9 +513,9 @@
         </section>
 
         <section id="incidents" class="section">
-          <p class="eyebrow">Incident Log</p>
-          <h1>Incidents</h1>
-          <p>Capture operational incidents, keep status visible, and reuse them directly inside the assistant.</p>
+          <p class="eyebrow">Operational Log</p>
+          <h1>Incidents & Events</h1>
+          <p>Capture manual incidents, monitor-worker summaries, and service-action outcomes. Reuse them directly inside the assistant.</p>
 
           <div class="section-layout">
             <section class="panel">
@@ -553,7 +553,7 @@
 
             <section class="panel">
               <p class="eyebrow">Timeline</p>
-              <h2>Logged Incidents</h2>
+              <h2>Operational Records</h2>
               <div id="incidents-grid" class="grid"></div>
             </section>
           </div>
@@ -563,7 +563,7 @@
           <p class="eyebrow">AIOps Assistant</p>
           <h1>Incident Response Copilot</h1>
           <p>
-            Analyze incidents against the current service catalog and platform overview to get deterministic triage guidance and runbook steps.
+            Analyze incidents or logged events against the current service catalog and platform overview to get deterministic triage guidance and runbook steps.
           </p>
 
           <div class="section-layout" style="margin-top: 28px;">
@@ -667,6 +667,21 @@
         if (value === "ok" || value === "running") return "ok";
         if (value === "warning" || value === "planned") return "warn";
         return "bad";
+      }
+
+      function actionClass(action) {
+        if (action === "restart") return "btn-primary";
+        if (action === "start") return "btn-secondary";
+        return "btn-danger";
+      }
+
+      function formatTimestamp(value) {
+        if (!value) return "unknown";
+        try {
+          return new Date(value).toLocaleString();
+        } catch (error) {
+          return String(value);
+        }
       }
 
       function parseTechnologies(value) {
@@ -912,9 +927,16 @@
                     ${service.health_endpoint ? `<span>Health: ${service.health_endpoint}</span>` : ""}
                   </div>
                   <div class="actions" style="margin-top: 14px;">
-                    ${service.allowed_actions && service.allowed_actions.includes("restart")
-                      ? `<button class="btn-primary" data-action="restart-service" data-id="${service.id}">Restart</button>`
-                      : ""}
+                    ${((service.allowed_actions || []).filter((action) => {
+                      if (action === "start") return service.status !== "running";
+                      if (action === "stop") return service.status !== "stopped";
+                      return true;
+                    }))
+                      .map(
+                        (action) =>
+                          `<button class="${actionClass(action)}" data-action="${action}-service" data-id="${service.id}">${action.charAt(0).toUpperCase() + action.slice(1)}</button>`
+                      )
+                      .join("")}
                     <button class="btn-secondary" data-action="edit-service" data-id="${service.id}">Edit</button>
                     <button class="btn-danger" data-action="delete-service" data-id="${service.id}">Remove</button>
                   </div>
@@ -950,10 +972,10 @@
         const options = state.incidents
           .map(
             (incident) =>
-              `<option value="${incident.id}">${escapeHtml(incident.title)} (${escapeHtml(incident.status)})</option>`
+              `<option value="${incident.id}">${escapeHtml(incident.title)} (${escapeHtml(incident.source || "manual")} · ${escapeHtml(incident.event_type || "incident")})</option>`
           )
           .join("");
-        select.innerHTML = `<option value="">Optional: select logged incident to autofill</option>${options}`;
+        select.innerHTML = `<option value="">Optional: select logged incident or event to autofill</option>${options}`;
         if (currentValue) {
           select.value = currentValue;
         }
@@ -966,7 +988,7 @@
           state.incidents = incidents;
           renderIncidentTemplates();
           if (incidents.length === 0) {
-            grid.innerHTML = '<div class="empty">No incidents yet. Log the first incident and analyze it from the assistant.</div>';
+            grid.innerHTML = '<div class="empty">No operational records yet. Log an incident or wait for the monitor-worker to create platform history.</div>';
             return;
           }
 
@@ -981,10 +1003,15 @@
                     <span>Status: ${escapeHtml(incident.status)}</span>
                     <span>Service ID: ${incident.affected_service_id}</span>
                   </div>
+                  <div class="muted-row">
+                    <span>Source: ${escapeHtml(incident.source || "manual")}</span>
+                    <span>Type: ${escapeHtml(incident.event_type || "incident")}</span>
+                    <span>Recorded: ${escapeHtml(formatTimestamp(incident.created_at))}</span>
+                  </div>
                   <div class="actions" style="margin-top: 14px;">
                     <button class="btn-primary" data-action="analyze-incident" data-id="${incident.id}">Analyze</button>
-                    <button class="btn-secondary" data-action="edit-incident" data-id="${incident.id}">Edit</button>
-                    <button class="btn-danger" data-action="delete-incident" data-id="${incident.id}">Remove</button>
+                    ${(incident.source || "manual") === "manual" ? `<button class="btn-secondary" data-action="edit-incident" data-id="${incident.id}">Edit</button>` : ""}
+                    ${(incident.source || "manual") === "manual" ? `<button class="btn-danger" data-action="delete-incident" data-id="${incident.id}">Remove</button>` : ""}
                   </div>
                 </article>
               `
@@ -1238,16 +1265,17 @@
           }
         }
 
-        if (button.dataset.action === "restart-service") {
-          if (!window.confirm("Restart this control-plane service?")) return;
+        if (["start-service", "stop-service", "restart-service"].includes(button.dataset.action)) {
+          const action = button.dataset.action.replace("-service", "");
+          if (!window.confirm(`${action.charAt(0).toUpperCase() + action.slice(1)} this service?`)) return;
           try {
             await apiRequest(`/api/services/${id}/actions`, {
               method: "POST",
-              body: JSON.stringify({ action: "restart" }),
+              body: JSON.stringify({ action }),
             });
-            await Promise.all([loadServices(), loadOverview()]);
+            await Promise.all([loadServices(), loadOverview(), loadIncidents()]);
           } catch (error) {
-            alert(`Failed to restart service: ${error.message}`);
+            alert(`Failed to ${action} service: ${error.message}`);
           }
         }
       });
@@ -1320,6 +1348,7 @@
         const summary = document.getElementById("incident-summary").value.trim();
         const symptoms = document.getElementById("incident-symptoms").value.trim();
         if (!affectedServiceId || !summary || !symptoms) return;
+        const selectedIncidentId = document.getElementById("incident-template").value;
 
         const button = document.getElementById("generate-btn");
         const output = document.getElementById("ai-output");
@@ -1332,6 +1361,7 @@
           const data = await apiRequest("/api/ai/incidents/analyze", {
             method: "POST",
             body: JSON.stringify({
+              incident_id: selectedIncidentId ? Number(selectedIncidentId) : null,
               affected_service_id: Number(affectedServiceId),
               severity: document.getElementById("incident-severity").value,
               summary,

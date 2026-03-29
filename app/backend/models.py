@@ -1,4 +1,6 @@
-from sqlalchemy import Boolean, Column, Integer, String, Text
+from datetime import datetime
+
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
 
 from .database import Base
 
@@ -59,5 +61,9 @@ class Incident(Base):
     symptoms = Column(Text, nullable=False)
     recent_changes = Column(Text)
     status = Column(String(50), nullable=False, default="open")
+    source = Column(String(100), default="manual")
+    event_type = Column(String(100), default="incident")
+    overview_snapshot = Column(Text)
     analysis = Column(Text)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     is_active = Column(Boolean, default=True)

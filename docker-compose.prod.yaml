@@ -57,6 +57,36 @@ services:
     networks:
       - app_network
 
+  monitor-worker:
+    build:
+      context: .
+      dockerfile: app/backend/Dockerfile
+    container_name: monitor_worker_prod
+    restart: unless-stopped
+    expose:
+      - "9000"
+    environment:
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/devops_platform
+      - ENVIRONMENT=production
+      - MONITOR_INTERVAL_SECONDS=60
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+      nginx:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks:
+      - app_network
+
   nginx:
     image: nginx:1.27-alpine
     container_name: nginx_prod

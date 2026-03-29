@@ -10,6 +10,7 @@ Keep changes aligned with the current VM-based deployment model.
 - Deploy runs on a self-hosted Linux runner on the VM and executes Ansible locally.
 - GitHub Actions CI runs on every push and pull request, including `feat/*` branches.
 - Deploy is manual and should not run from feature branches.
+- `monitor-worker` is a non-critical service that records operational log entries for the incident assistant.
 
 ## Working Rules
 
@@ -19,3 +20,5 @@ Keep changes aligned with the current VM-based deployment model.
 - Preserve the `/`, `/api/*`, and `/health` routing contract.
 - Keep healthchecks and Dockerfile entrypoints compatible with the actual image layout.
 - Use `infra/ansible/group_vars/all.yml` for shared Ansible variables.
+- Keep control-plane services restart-only from the UI.
+- Keep log entries reusable by the assistant, but do not make autofill mandatory.

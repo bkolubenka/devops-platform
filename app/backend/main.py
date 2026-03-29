@@ -2,6 +2,7 @@ import json
 import os
 import urllib.error
 import urllib.request
+from datetime import datetime
 from typing import Any, Optional
 
 import docker
@@ -198,6 +199,12 @@ SERVICE_ACTION_POLICIES: dict[str, dict[str, Any]] = {
         "allowed_actions": ["restart"],
         "control_plane": True,
     },
+    "monitor-worker": {
+        "control_mode": "managed",
+        "runtime_target": "monitor_worker",
+        "allowed_actions": ["start", "stop", "restart"],
+        "control_plane": False,
+    },
 }
 
 
@@ -239,12 +246,28 @@ def ensure_schema_alignment() -> None:
                     symptoms TEXT NOT NULL,
                     recent_changes TEXT,
                     status VARCHAR(50) NOT NULL DEFAULT 'open',
+                    source VARCHAR(100) DEFAULT 'manual',
+                    event_type VARCHAR(100) DEFAULT 'incident',
+                    overview_snapshot TEXT,
                     analysis TEXT,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     is_active BOOLEAN DEFAULT TRUE
                 )
                 """
             )
         )
+        for column_name, column_definition in [
+            ("source", "VARCHAR(100) DEFAULT 'manual'"),
+            ("event_type", "VARCHAR(100) DEFAULT 'incident'"),
+            ("overview_snapshot", "TEXT"),
+            ("created_at", "TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP"),
+        ]:
+            connection.execute(
+                text(
+                    f"ALTER TABLE incidents "
+                    f"ADD COLUMN IF NOT EXISTS {column_name} {column_definition}"
+                )
+            )
 
 
 ensure_schema_alignment()
@@ -349,6 +372,9 @@ class IncidentBase(BaseModel):
     symptoms: str = Field(min_length=5)
     recent_changes: Optional[str] = None
     status: str = Field(default="open", pattern="^(open|investigating|resolved)$")
+    source: Optional[str] = None
+    event_type: Optional[str] = None
+    overview_snapshot: Optional[dict[str, Any]] = None
 
 
 class IncidentCreate(IncidentBase):
@@ -362,6 +388,7 @@ class IncidentUpdate(IncidentBase):
 class IncidentRead(IncidentBase):
     id: int
     analysis: Optional[dict[str, Any]] = None
+    created_at: datetime
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -392,6 +419,7 @@ class OverviewResponse(BaseModel):
 
 
 class IncidentRequest(BaseModel):
+    incident_id: Optional[int] = None
     summary: str = Field(min_length=5)
     affected_service_id: Optional[int] = None
     affected_service_name: Optional[str] = None
@@ -401,9 +429,13 @@ class IncidentRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_service_reference(self) -> "IncidentRequest":
-        if not self.affected_service_id and not self.affected_service_name:
+        if (
+            not self.affected_service_id
+            and not self.affected_service_name
+            and not self.incident_id
+        ):
             raise ValueError(
-                "Either affected_service_id or affected_service_name must be provided."
+                "Either incident_id, affected_service_id, or affected_service_name must be provided."
             )
         return self
 
@@ -485,6 +517,13 @@ def serialize_incident(incident: DBIncident) -> IncidentRead:
         except json.JSONDecodeError:
             parsed_analysis = None
 
+    parsed_overview_snapshot = None
+    if incident.overview_snapshot:
+        try:
+            parsed_overview_snapshot = json.loads(incident.overview_snapshot)
+        except json.JSONDecodeError:
+            parsed_overview_snapshot = None
+
     return IncidentRead(
         id=incident.id,
         title=incident.title,
@@ -494,8 +533,50 @@ def serialize_incident(incident: DBIncident) -> IncidentRead:
         symptoms=incident.symptoms,
         recent_changes=incident.recent_changes,
         status=incident.status,
+        source=incident.source or "manual",
+        event_type=incident.event_type or "incident",
+        overview_snapshot=parsed_overview_snapshot,
         analysis=parsed_analysis,
+        created_at=incident.created_at or datetime.utcnow(),
     )
+
+
+def dump_json_value(value: Any) -> str:
+    return json.dumps(value, default=str, separators=(",", ":"))
+
+
+def record_incident_entry(
+    db: Session,
+    *,
+    title: str,
+    affected_service_id: int,
+    severity: str,
+    summary: str,
+    symptoms: str,
+    recent_changes: Optional[str] = None,
+    status: str = "open",
+    source: str = "manual",
+    event_type: str = "incident",
+    overview_snapshot: Optional[dict[str, Any]] = None,
+    analysis: Optional[dict[str, Any]] = None,
+) -> DBIncident:
+    incident = DBIncident(
+        title=title,
+        affected_service_id=affected_service_id,
+        severity=severity,
+        summary=summary,
+        symptoms=symptoms,
+        recent_changes=recent_changes,
+        status=status,
+        source=source,
+        event_type=event_type,
+        overview_snapshot=dump_json_value(overview_snapshot) if overview_snapshot else None,
+        analysis=dump_json_value(analysis) if analysis else None,
+    )
+    db.add(incident)
+    db.commit()
+    db.refresh(incident)
+    return incident
 
 
 def check_http_target(url: str) -> tuple[bool, str]:
@@ -572,6 +653,21 @@ def resolve_service_context(db: Session, payload: IncidentRequest) -> IncidentSe
             )
             .first()
         )
+    elif payload.incident_id is not None:
+        incident = (
+            db.query(DBIncident)
+            .filter(DBIncident.id == payload.incident_id, DBIncident.is_active.is_(True))
+            .first()
+        )
+        if incident and incident.affected_service_id is not None:
+            service = (
+                db.query(DBService)
+                .filter(
+                    DBService.id == incident.affected_service_id,
+                    DBService.is_active.is_(True),
+                )
+                .first()
+            )
     elif payload.affected_service_name:
         service = (
             db.query(DBService)
@@ -696,7 +792,7 @@ def build_incident_analysis(
     )
 
 
-def run_service_action(service: DBService, action: str) -> ServiceActionResponse:
+def run_service_action(db: Session, service: DBService, action: str) -> ServiceActionResponse:
     policy = SERVICE_ACTION_POLICIES.get(service.name)
     if not policy:
         raise HTTPException(
@@ -715,26 +811,92 @@ def run_service_action(service: DBService, action: str) -> ServiceActionResponse
         )
 
     runtime_target = service.runtime_target or policy["runtime_target"]
+    client = docker.from_env()
     try:
-        client = docker.from_env()
         container = client.containers.get(runtime_target)
         if action == "restart":
             container.restart(timeout=10)
+            service.status = "running"
         elif action == "start":
             container.start()
+            service.status = "running"
         elif action == "stop":
             container.stop(timeout=10)
-        client.close()
+            service.status = "stopped"
+
+        overview_snapshot = compute_overview(db).model_dump()
+        record_incident_entry(
+            db,
+            title=f"{service.name} {action} requested from portal",
+            affected_service_id=service.id,
+            severity="low",
+            summary=f"Portal executed a {action} action for {service.name}.",
+            symptoms=f"Operator requested {action} from the service catalog.",
+            recent_changes=f"Service action executed for runtime target {runtime_target}.",
+            status="resolved",
+            source="service-action",
+            event_type=f"service_{action}",
+            overview_snapshot=overview_snapshot,
+            analysis={
+                "action": action,
+                "runtime_target": runtime_target,
+                "control_mode": policy.get("control_mode"),
+                "control_plane": policy.get("control_plane", False),
+                "result": "success",
+            },
+        )
     except docker.errors.NotFound as exc:
+        record_incident_entry(
+            db,
+            title=f"{service.name} {action} failed",
+            affected_service_id=service.id,
+            severity="high",
+            summary=f"Portal could not find container '{runtime_target}' for {service.name}.",
+            symptoms="Docker reported that the target container was missing.",
+            recent_changes=f"Service action attempted for runtime target {runtime_target}.",
+            status="open",
+            source="service-action",
+            event_type=f"service_{action}_failed",
+            overview_snapshot=compute_overview(db).model_dump(),
+            analysis={
+                "action": action,
+                "runtime_target": runtime_target,
+                "control_mode": policy.get("control_mode"),
+                "control_plane": policy.get("control_plane", False),
+                "result": "container-not-found",
+            },
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Service action failed: container '{runtime_target}' was not found",
         ) from exc
     except docker.errors.DockerException as exc:
+        record_incident_entry(
+            db,
+            title=f"{service.name} {action} failed",
+            affected_service_id=service.id,
+            severity="high",
+            summary=f"Portal could not execute {action} for {service.name}.",
+            symptoms=str(exc),
+            recent_changes=f"Service action attempted for runtime target {runtime_target}.",
+            status="open",
+            source="service-action",
+            event_type=f"service_{action}_failed",
+            overview_snapshot=compute_overview(db).model_dump(),
+            analysis={
+                "action": action,
+                "runtime_target": runtime_target,
+                "control_mode": policy.get("control_mode"),
+                "control_plane": policy.get("control_plane", False),
+                "result": "docker-error",
+            },
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Service action failed: {exc}",
         ) from exc
+    finally:
+        client.close()
 
     return ServiceActionResponse(
         service_id=service.id,
@@ -790,46 +952,65 @@ def initialize_sample_data(db: Session) -> None:
         ]
         db.add_all(skill_records)
 
-    if db.query(DBService).count() == 0:
-        service_records = [
-            DBService(
-                name="frontend",
-                service_type="web-ui",
-                description="Static frontend served behind Nginx.",
-                url="http://frontend/",
-                health_endpoint="http://frontend/",
-                environment="dev",
-                status="running",
-                owner="Frontend",
-                runtime_target="frontend",
-                control_mode="restart_only",
+    service_records = [
+        DBService(
+            name="frontend",
+            service_type="web-ui",
+            description="Static frontend served behind Nginx.",
+            url="http://frontend/",
+            health_endpoint="http://frontend/",
+            environment="dev",
+            status="running",
+            owner="Frontend",
+            runtime_target="frontend",
+            control_mode="restart_only",
+        ),
+        DBService(
+            name="backend",
+            service_type="api",
+            description="FastAPI application serving overview, CRUD, and incident assistant endpoints.",
+            url="http://backend:8000/",
+            health_endpoint="http://backend:8000/health",
+            environment="dev",
+            status="running",
+            owner="Platform",
+            runtime_target="backend",
+            control_mode="restart_only",
+        ),
+        DBService(
+            name="nginx",
+            service_type="reverse-proxy",
+            description="Ingress container routing frontend and backend traffic.",
+            url="http://nginx/",
+            health_endpoint="http://nginx/health",
+            environment="dev",
+            status="running",
+            owner="Platform",
+            runtime_target="nginx",
+            control_mode="restart_only",
+        ),
+        DBService(
+            name="monitor-worker",
+            service_type="ops-worker",
+            description=(
+                "Minute-based platform monitor that checks service health, records "
+                "operational events, and powers incident autofill."
             ),
-            DBService(
-                name="backend",
-                service_type="api",
-                description="FastAPI application serving overview, CRUD, and incident assistant endpoints.",
-                url="http://backend:8000/",
-                health_endpoint="http://backend:8000/health",
-                environment="dev",
-                status="running",
-                owner="Platform",
-                runtime_target="backend",
-                control_mode="restart_only",
-            ),
-            DBService(
-                name="nginx",
-                service_type="reverse-proxy",
-                description="Ingress container routing frontend and backend traffic.",
-                url="http://nginx/",
-                health_endpoint="http://nginx/health",
-                environment="dev",
-                status="running",
-                owner="Platform",
-                runtime_target="nginx",
-                control_mode="restart_only",
-            ),
-        ]
-        db.add_all(service_records)
+            url="http://monitor-worker:9000/",
+            health_endpoint="http://monitor-worker:9000/health",
+            environment="dev",
+            status="running",
+            owner="Platform",
+            runtime_target="monitor_worker",
+            control_mode="managed",
+        ),
+    ]
+    existing_service_names = {
+        service.name for service in db.query(DBService).filter(DBService.is_active.is_(True)).all()
+    }
+    for service_record in service_records:
+        if service_record.name not in existing_service_names:
+            db.add(service_record)
 
     if db.query(DBIncident).count() == 0:
         backend_service = db.query(DBService).filter(DBService.name == "backend").first()
@@ -851,6 +1032,8 @@ def initialize_sample_data(db: Session) -> None:
         if policy:
             service.runtime_target = policy["runtime_target"]
             service.control_mode = policy["control_mode"]
+            if policy.get("allowed_actions") and service.name == "monitor-worker":
+                service.status = service.status or "running"
 
     db.commit()
 
@@ -1057,7 +1240,7 @@ def service_action(
     )
     if not service:
         raise HTTPException(status_code=404, detail="Service not found")
-    return run_service_action(service, payload.action)
+    return run_service_action(db, service, payload.action)
 
 
 @app.get("/api/incidents", response_model=list[IncidentRead])
@@ -1095,10 +1278,19 @@ def create_incident(
     if not service:
         raise HTTPException(status_code=404, detail="Affected service not found")
 
-    incident = DBIncident(**payload.model_dump())
-    db.add(incident)
-    db.commit()
-    db.refresh(incident)
+    incident = record_incident_entry(
+        db,
+        title=payload.title,
+        affected_service_id=payload.affected_service_id,
+        severity=payload.severity,
+        summary=payload.summary,
+        symptoms=payload.symptoms,
+        recent_changes=payload.recent_changes,
+        status=payload.status,
+        source=payload.source or "manual",
+        event_type=payload.event_type or "incident",
+        overview_snapshot=payload.overview_snapshot,
+    )
     return serialize_incident(incident)
 
 
@@ -1113,6 +1305,11 @@ def update_incident(
     )
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
+    if (incident.source or "manual") != "manual":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Operational log entries are read-only.",
+        )
 
     service = (
         db.query(DBService)
@@ -1122,8 +1319,14 @@ def update_incident(
     if not service:
         raise HTTPException(status_code=404, detail="Affected service not found")
 
-    for field, value in payload.model_dump().items():
-        setattr(incident, field, value)
+    update_data = payload.model_dump(exclude_unset=True)
+    update_data["source"] = update_data.get("source") or "manual"
+    update_data["event_type"] = update_data.get("event_type") or "incident"
+    for field, value in update_data.items():
+        if field == "overview_snapshot" and value is not None:
+            setattr(incident, field, dump_json_value(value))
+        else:
+            setattr(incident, field, value)
 
     db.commit()
     db.refresh(incident)
@@ -1139,6 +1342,11 @@ def delete_incident(incident_id: int, db: Session = Depends(get_db)) -> Response
     )
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
+    if (incident.source or "manual") != "manual":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Operational log entries are read-only.",
+        )
 
     incident.is_active = False
     db.commit()
@@ -1155,17 +1363,31 @@ def analyze_incident(
 ) -> IncidentAnalysisResponse:
     analysis = build_incident_analysis(db, payload)
 
-    incident = (
-        db.query(DBIncident)
-        .filter(
-            DBIncident.affected_service_id == analysis.service_context.id,
-            DBIncident.summary == payload.summary,
-            DBIncident.symptoms == payload.symptoms,
-            DBIncident.is_active.is_(True),
+    incident = None
+    if payload.incident_id is not None:
+        incident = (
+            db.query(DBIncident)
+            .filter(
+                DBIncident.id == payload.incident_id,
+                DBIncident.is_active.is_(True),
+            )
+            .first()
         )
-        .order_by(DBIncident.id.desc())
-        .first()
-    )
+        if not incident:
+            raise HTTPException(status_code=404, detail="Incident not found")
+    else:
+        incident = (
+            db.query(DBIncident)
+            .filter(
+                DBIncident.affected_service_id == analysis.service_context.id,
+                DBIncident.summary == payload.summary,
+                DBIncident.symptoms == payload.symptoms,
+                DBIncident.is_active.is_(True),
+            )
+            .order_by(DBIncident.id.desc())
+            .first()
+        )
+
     if incident:
         incident.analysis = json.dumps(analysis.model_dump())
         db.commit()
