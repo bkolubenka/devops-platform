@@ -15,6 +15,12 @@
       - python3-certbot-nginx
 
   tasks:
+    - name: Validate deploy environment
+      assert:
+        that:
+          - deploy_env in ['dev', 'prod']
+        fail_msg: "Invalid deploy_env='{{ deploy_env }}'. Set DEPLOY_ENV to 'dev' or 'prod'."
+
     - name: Ensure APT keyrings directory exists
       file:
         path: /etc/apt/keyrings
@@ -270,7 +276,7 @@
         chdir: "{{ runtime_root }}"
       when: deploy_env == 'prod'
 
-    - name: Start production stack without destructive teardown
+    - name: Start production stack without
       command: docker compose -f docker-compose.prod.yaml up -d
       args:
         chdir: "{{ runtime_root }}"
