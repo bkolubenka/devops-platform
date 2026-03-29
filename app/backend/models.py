@@ -43,4 +43,21 @@ class Service(Base):
     environment = Column(String(50), default="dev")
     status = Column(String(50), default="running")
     owner = Column(String(100))
+    runtime_target = Column(String(120))
+    control_mode = Column(String(50), default="observe")
+    is_active = Column(Boolean, default=True)
+
+
+class Incident(Base):
+    __tablename__ = "incidents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(255), nullable=False)
+    affected_service_id = Column(Integer)
+    severity = Column(String(50), nullable=False, default="medium")
+    summary = Column(Text, nullable=False)
+    symptoms = Column(Text, nullable=False)
+    recent_changes = Column(Text)
+    status = Column(String(50), nullable=False, default="open")
+    analysis = Column(Text)
     is_active = Column(Boolean, default=True)
