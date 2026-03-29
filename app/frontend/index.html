@@ -571,9 +571,8 @@
               <p class="eyebrow">Incident Input</p>
               <h2>Analyze Incident</h2>
               <form id="ai-form">
-                <select id="incident-template">
-                  <option value="">Optional: select logged incident to autofill</option>
-                </select>
+                <select id="incident-template"></select>
+                <p class="metric-meta" style="margin-top: -2px;">Leave empty to analyze a free-form incident, or pick a logged record to autofill.</p>
                 <div class="two-up">
                   <select id="incident-service" required>
                     <option value="">Select affected service</option>
@@ -975,7 +974,7 @@
               `<option value="${incident.id}">${escapeHtml(incident.title)} (${escapeHtml(incident.source || "manual")} · ${escapeHtml(incident.event_type || "incident")})</option>`
           )
           .join("");
-        select.innerHTML = `<option value="">Optional: select logged incident or event to autofill</option>${options}`;
+        select.innerHTML = options || '<option value="">No logged incidents yet</option>';
         if (currentValue) {
           select.value = currentValue;
         }
