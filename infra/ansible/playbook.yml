@@ -390,7 +390,21 @@
         chdir: "{{ runtime_root }}"
       when: deploy_env == 'prod'
 
-    - name: Start production stack without
+    - name: Stop containers publishing 80 or 443 before starting production stack
+      shell: |
+        set -e
+        ids=$(docker ps --filter "publish=80" --filter "publish=443" --format '{{ "{{" }}.ID{{ "}}" }}' | sort -u)
+        if [ -n "$ids" ]; then
+          docker stop $ids
+        fi
+        echo "$ids"
+      args:
+        executable: /bin/bash
+      register: port_listener_stop_before_prod
+      changed_when: "(port_listener_stop_before_prod.stdout | trim) != ''"
+      when: deploy_env == 'prod'
+
+    - name: Start production stack
       command: docker compose -f docker-compose.prod.yaml up -d
       args:
         chdir: "{{ runtime_root }}"
