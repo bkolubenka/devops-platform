@@ -27,15 +27,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install ansible
 
-      - name: Start ssh-agent
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-      - name: Add server to known_hosts
+      - name: Create local Ansible inventory for VM runner
         run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan -H vm-1.tail5492ae.ts.net >> ~/.ssh/known_hosts
+          cat > infra/ansible/inventory.runner.ini <<EOF
+          [server]
+          localhost ansible_connection=local ansible_python_interpreter=/usr/bin/python3
+          EOF
 
       - name: Run deploy playbook
         env:
@@ -43,6 +40,6 @@ jobs:
         run: |
           ANSIBLE_LOCAL_TEMP=/tmp/.ansible/tmp \
           ansible-playbook \
-          -i infra/ansible/inventory.ini \
+          -i infra/ansible/inventory.runner.ini \
           infra/ansible/playbook.yml \
           -e "ansible_become_password=${ANSIBLE_BECOME_PASSWORD}"
