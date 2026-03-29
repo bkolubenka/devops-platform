@@ -11,6 +11,7 @@ Keep changes aligned with the current VM-based deployment model.
 - GitHub Actions CI runs on every push and pull request, including `feat/*` branches.
 - Deploy is manual and should not run from feature branches.
 - `monitor-worker` is a non-critical service that records operational log entries for the incident assistant.
+- Alembic migrations own schema and release-bound data changes.
 
 ## Working Rules
 
@@ -20,5 +21,6 @@ Keep changes aligned with the current VM-based deployment model.
 - Preserve the `/`, `/api/*`, and `/health` routing contract.
 - Keep healthchecks and Dockerfile entrypoints compatible with the actual image layout.
 - Use `infra/ansible/group_vars/all.yml` for shared Ansible variables.
+- Keep Postgres data persistent across deploys; normal deploys should not delete the volume.
 - Keep control-plane services restart-only from the UI.
 - Keep log entries reusable by the assistant, but do not make autofill mandatory.

@@ -23,6 +23,7 @@ services:
       dockerfile: app/backend/Dockerfile
     container_name: backend
     restart: unless-stopped
+    command: sh -c "alembic -c backend/alembic.ini upgrade head && uvicorn backend.main:app --host 0.0.0.0 --port 8000"
     expose:
       - "8000"
     environment:
@@ -58,6 +59,7 @@ services:
       dockerfile: app/backend/Dockerfile
     container_name: monitor_worker
     restart: unless-stopped
+    command: ["python", "-m", "backend.monitor_worker"]
     expose:
       - "9000"
     environment:

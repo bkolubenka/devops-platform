@@ -7,6 +7,7 @@ Containerized fullstack pet project deployed to an Ubuntu VM with Ansible, Docke
 - FastAPI backend with portfolio, service catalog, overview, operational log, and incident-assistant AI endpoints
 - static frontend served separately from the backend
 - PostgreSQL-backed persistence
+- Alembic migrations for schema and release data changes
 - CRUD management for projects, services, incidents, and operational log entries
 - service-aware incident assistant with deterministic runbook guidance and incident autofill
 - monitor-worker demo service that records platform health summaries and state transitions
@@ -54,6 +55,10 @@ app/
     monitor_worker.py
     database.py
     models.py
+    alembic.ini
+    alembic/
+      env.py
+      versions/
     requirements.txt
     Dockerfile
   frontend/
@@ -109,7 +114,7 @@ Then open:
 Manual deploy:
 
 ```bash
-DEPLOY_REPO_REF=main ansible-playbook -i infra/ansible/inventory.ini infra/ansible/playbook.yml --ask-become-pass
+DEPLOY_ENV=dev DEPLOY_REPO_REF=main ansible-playbook -i infra/ansible/inventory.ini infra/ansible/playbook.yml --ask-become-pass
 ```
 
 GitHub Actions deploy:
@@ -138,12 +143,13 @@ Required GitHub secret:
 
 - `docker-compose.dev.yaml` is the active working environment
 - `docker-compose.prod.yaml` is the production-oriented compose file and should be treated as evolving configuration
+- Postgres data lives in a named volume and is preserved across deploys
+- Schema and release-bound data changes should be done through Alembic migrations
 - SSL/domain configuration exists in the repo, but should be finalized only when a real domain is ready
 
 ## Next Improvements
 
 - move hardcoded development database credentials to env files
-- add database migrations
 - replace the demo AI endpoint with a real model-backed service or RAG layer
 - split Nginx config cleanly for dev vs prod
-- add backups and retention policy for operational logs
+- add targeted tests for incident autofill and service actions

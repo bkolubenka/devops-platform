@@ -14,6 +14,7 @@ This repository is a VM-based DevOps pet project with:
 - GitHub Actions CI
 - self-hosted deploy runner on the VM
 - monitor-worker demo service and operational log
+- Alembic migrations for schema and release-bound data changes
 
 ## Source Of Truth
 
@@ -39,6 +40,7 @@ This repository is a VM-based DevOps pet project with:
 - Prefer variables in `infra/ansible/group_vars/all.yml` over scattered hardcoding.
 - Keep backend package/import layout compatible with the backend Docker image.
 - Use healthchecks only with commands available inside the image.
+- Keep Postgres data persistent across deploys; do not remove the named volume in normal deploys.
 - Keep the monitor-worker stoppable/startable without making the control plane inaccessible.
 - Treat service actions and monitor-worker sweeps as reusable operational history for the incident assistant.
 
@@ -52,7 +54,7 @@ This repository is a VM-based DevOps pet project with:
 ## Good Next Steps
 
 - move DB credentials and other config to env-based secrets management
-- add database migrations
+- extend or add Alembic migrations for schema and release-bound data changes
 - split dev/prod Nginx configuration cleanly
 - improve application usefulness before adding more infrastructure complexity
 - extend incident history before adding a real LLM or RAG layer

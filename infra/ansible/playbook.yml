@@ -52,7 +52,7 @@
       when: "'nginx.service' in ansible_facts.services"
 
     - name: Stop existing docker compose stack
-      command: docker-compose -f {{ compose_file }} down --remove-orphans --volumes
+      command: docker-compose -f {{ compose_file }} down --remove-orphans
       args:
         chdir: "{{ app_dir }}"
       failed_when: false
