@@ -181,6 +181,28 @@
       register: prod_runtime_compose_stat
       when: deploy_env == 'prod'
 
+    - name: Validate dev repo_url is not a placeholder
+      assert:
+        that:
+          - repo_url is not search('your/repo')
+        fail_msg: "Invalid repo_url='{{ repo_url }}'. Use a real repository URL for dev deploys."
+      when: deploy_env == 'dev'
+
+    - name: Verify dev repository is reachable non-interactively
+      command: git ls-remote "{{ repo_url }}" "{{ repo_version }}"
+      register: dev_repo_probe
+      changed_when: false
+      environment:
+        GIT_TERMINAL_PROMPT: "0"
+      when: deploy_env == 'dev'
+
+    - name: Fail fast when dev repository access is unavailable
+      fail:
+        msg: "Cannot access repo_url='{{ repo_url }}' with repo_version='{{ repo_version }}'. Check URL, repository visibility, and host credentials. Git output: {{ dev_repo_probe.stderr | default(dev_repo_probe.stdout) }}"
+      when:
+        - deploy_env == 'dev'
+        - dev_repo_probe.rc != 0
+
     - name: Pull application source on server for dev
       git:
         repo: "{{ repo_url }}"
