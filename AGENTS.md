@@ -13,6 +13,7 @@ This repository is a VM-based DevOps pet project with:
 - Ansible deployment
 - GitHub Actions CI
 - self-hosted deploy runner on the VM
+- monitor-worker demo service and operational log
 
 ## Source Of Truth
 
@@ -38,6 +39,8 @@ This repository is a VM-based DevOps pet project with:
 - Prefer variables in `infra/ansible/group_vars/all.yml` over scattered hardcoding.
 - Keep backend package/import layout compatible with the backend Docker image.
 - Use healthchecks only with commands available inside the image.
+- Keep the monitor-worker stoppable/startable without making the control plane inaccessible.
+- Treat service actions and monitor-worker sweeps as reusable operational history for the incident assistant.
 
 ## Be Careful About
 
@@ -52,3 +55,4 @@ This repository is a VM-based DevOps pet project with:
 - add database migrations
 - split dev/prod Nginx configuration cleanly
 - improve application usefulness before adding more infrastructure complexity
+- extend incident history before adding a real LLM or RAG layer

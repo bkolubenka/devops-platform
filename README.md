@@ -4,11 +4,12 @@ Containerized fullstack pet project deployed to an Ubuntu VM with Ansible, Docke
 
 ## What This Project Shows
 
-- FastAPI backend with portfolio, service catalog, overview, and incident-assistant AI endpoints
+- FastAPI backend with portfolio, service catalog, overview, operational log, and incident-assistant AI endpoints
 - static frontend served separately from the backend
 - PostgreSQL-backed persistence
-- CRUD management for projects, services, and incidents
-- service-aware incident assistant with deterministic runbook guidance
+- CRUD management for projects, services, incidents, and operational log entries
+- service-aware incident assistant with deterministic runbook guidance and incident autofill
+- monitor-worker demo service that records platform health summaries and state transitions
 - Nginx reverse proxy on the VM
 - Ansible-based deployment
 - GitHub Actions CI
@@ -31,6 +32,8 @@ Nginx
   └─ /health  -> backend health check
 ```
 
+- `monitor-worker` is a separate demo worker container that records operational log sweeps and incident history.
+
 ## Tech Stack
 
 - Python 3.11
@@ -48,6 +51,7 @@ Nginx
 app/
   backend/
     main.py
+    monitor_worker.py
     database.py
     models.py
     requirements.txt
@@ -83,6 +87,7 @@ infra/
 - `/api/services`
 - `/api/services/{id}/actions`
 - `/api/incidents`
+- `/api/incidents/{id}`
 - `/api/ai/incidents/analyze`
 - `/api/ai/generate-text`
 - `/api/ai/models`
@@ -123,6 +128,12 @@ Required GitHub secret:
 
 - `BECOME_PASSWORD`
 
+## Operational Flow
+
+- `monitor-worker` runs every minute and records health summaries or service-state changes in the incident log
+- service action outcomes are written back to the same log so the AI assistant can reuse them later
+- logged incidents or events can be selected in the Incident Assistant to autofill the form, but manual analysis still works without a selection
+
 ## Notes
 
 - `docker-compose.dev.yaml` is the active working environment
@@ -133,6 +144,6 @@ Required GitHub secret:
 
 - move hardcoded development database credentials to env files
 - add database migrations
-- replace demo AI endpoint with a real model-backed service
+- replace the demo AI endpoint with a real model-backed service or RAG layer
 - split Nginx config cleanly for dev vs prod
-- add monitoring and backups
+- add backups and retention policy for operational logs
