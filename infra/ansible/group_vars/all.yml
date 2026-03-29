@@ -16,7 +16,6 @@ build_date: "{{ lookup('env', 'DEPLOY_BUILD_DATE') | default('unknown', true) }}
 build_id: "{{ lookup('env', 'DEPLOY_BUILD_ID') | default('unknown', true) }}"
 container_registry: "{{ lookup('env', 'DEPLOY_CONTAINER_REGISTRY') | default('local-build', true) }}"
 rollback_to_previous: "{{ lookup('env', 'DEPLOY_ROLLBACK_TO_PREVIOUS') | default('false', true) | bool }}"
-force_clean_dev: "{{ lookup('env', 'DEPLOY_FORCE_CLEAN_DEV') | default('false', true) | bool }}"
 db_user: "{{ lookup('env', 'DEPLOY_DB_USER') | default('devops_user', true) }}"
 db_password: "{{ lookup('env', 'DEPLOY_DB_PASSWORD') | default('devops_password', true) }}"
 secret_key: "{{ lookup('env', 'DEPLOY_SECRET_KEY') | default('change-me', true) }}"

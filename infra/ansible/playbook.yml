@@ -4,8 +4,10 @@
 
   vars:
     common_packages:
-      - docker.io
-      - docker-compose
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-compose-plugin
     dev_packages:
       - git
     prod_packages:
@@ -13,6 +15,26 @@
       - python3-certbot-nginx
 
   tasks:
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+
+    - name: Remove old Docker packages
+      apt:
+        name:
+          - docker.io
+          - docker-compose
+          - docker-doc
+          - podman-docker
+        state: absent
+        purge: yes
+
     - name: Install required packages
       apt:
         name: "{{ common_packages + (dev_packages if deploy_env == 'dev' else prod_packages) }}"
@@ -179,14 +201,8 @@
         mode: "0600"
       when: deploy_env == 'prod'
 
-    - name: Stop existing dev containers
-      command: docker-compose -f {{ compose_file }} down
-      args:
-        chdir: "{{ app_dir }}"
-      when: deploy_env == 'dev' and force_clean_dev
-
     - name: Run dev docker compose build and deploy
-      command: docker-compose -f {{ compose_file }} up -d --build --force-recreate
+      command: docker compose -f {{ compose_file }} up -d --build
       args:
         chdir: "{{ app_dir }}"
       environment:
@@ -200,13 +216,13 @@
       when: deploy_env == 'dev'
 
     - name: Pull production images
-      command: docker-compose -f docker-compose.prod.yaml pull
+      command: docker compose -f docker-compose.prod.yaml pull
       args:
         chdir: "{{ runtime_root }}"
       when: deploy_env == 'prod'
 
     - name: Start only the production database
-      command: docker-compose -f docker-compose.prod.yaml up -d db
+      command: docker compose -f docker-compose.prod.yaml up -d db
       args:
         chdir: "{{ runtime_root }}"
       when: deploy_env == 'prod'
@@ -221,13 +237,13 @@
       when: deploy_env == 'prod'
 
     - name: Run one-shot production database migration
-      shell: docker-compose -f docker-compose.prod.yaml run --rm backend alembic -c backend/alembic.ini upgrade head
+      shell: docker compose -f docker-compose.prod.yaml run --rm backend alembic -c backend/alembic.ini upgrade head
       args:
         chdir: "{{ runtime_root }}"
       when: deploy_env == 'prod'
 
     - name: Start production stack without destructive teardown
-      command: docker-compose -f docker-compose.prod.yaml up -d
+      command: docker compose -f docker-compose.prod.yaml up -d
       args:
         chdir: "{{ runtime_root }}"
       when: deploy_env == 'prod'
@@ -267,5 +283,5 @@
         name: "SSL certificate renewal"
         minute: "0"
         hour: "12"
-        job: "certbot renew --quiet && docker-compose -f {{ runtime_root }}/docker-compose.prod.yaml restart nginx"
+        job: "certbot renew --quiet && docker compose -f {{ runtime_root }}/docker-compose.prod.yaml restart nginx"
       when: deploy_env == 'prod'
