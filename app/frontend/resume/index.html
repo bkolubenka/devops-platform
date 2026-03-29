@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Resume - DevOps Platform</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f4efe7;
+        --surface: rgba(255, 250, 242, 0.9);
+        --surface-strong: #fffdf8;
+        --ink: #1d2533;
+        --muted: #5c6677;
+        --accent: #bf5a1d;
+        --accent-soft: #ffe1cb;
+        --line: rgba(29, 37, 51, 0.12);
+        --ok: #138a63;
+        --warn: #c5841a;
+        --bad: #bb3f3f;
+        --shadow: 0 22px 60px rgba(29, 37, 51, 0.08);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Georgia, "Times New Roman", serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(191, 90, 29, 0.14), transparent 28%),
+          radial-gradient(circle at top right, rgba(74, 122, 198, 0.12), transparent 20%),
+          linear-gradient(135deg, #f7f2ea, #edf4ff 58%, #fff6ee);
+      }
+
+      nav {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        backdrop-filter: blur(12px);
+        background: rgba(255, 250, 242, 0.94);
+        border-bottom: 1px solid var(--line);
+      }
+
+      .nav-shell,
+      .page-shell {
+        width: min(1180px, calc(100% - 32px));
+        margin: 0 auto;
+      }
+
+      .nav-shell {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 0;
+      }
+
+      .brand {
+        margin: 0;
+        color: var(--accent);
+        font-size: 2rem;
+      }
+
+      .nav-links {
+        display: flex;
+        gap: 14px;
+        flex-wrap: wrap;
+      }
+
+      .nav-link {
+        color: var(--ink);
+        text-decoration: none;
+        padding: 10px 16px;
+        border-radius: 999px;
+        transition: 0.2s ease;
+      }
+
+      .nav-link.active,
+      .nav-link:hover {
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+
+      .page-shell {
+        padding: 40px 0 56px;
+      }
+
+      main {
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        padding: 30px;
+        background: var(--surface);
+        box-shadow: var(--shadow);
+      }
+
+      .eyebrow {
+        margin: 0 0 10px;
+        color: var(--accent);
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        font-size: 0.86rem;
+      }
+
+      h1 {
+        margin: 0 0 14px;
+        line-height: 0.94;
+        font-size: clamp(2.6rem, 7vw, 5.2rem);
+      }
+
+      h2 {
+        margin: 0 0 12px;
+        font-size: 1.8rem;
+      }
+
+      p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.6;
+        font-size: 1.05rem;
+      }
+
+      .portfolio-intro {
+        display: grid;
+        gap: 18px;
+        margin-top: 28px;
+      }
+
+      .grid {
+        display: grid;
+        gap: 16px;
+        margin-top: 28px;
+      }
+
+      .panel {
+        background: var(--surface-strong);
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        padding: 18px;
+      }
+
+      .highlight-list,
+      .contact-list {
+        display: grid;
+        gap: 12px;
+        margin-top: 16px;
+      }
+
+      .highlight-item,
+      .contact-item {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        padding: 14px 16px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: var(--surface-strong);
+      }
+
+      .highlight-mark {
+        flex: 0 0 auto;
+        width: 10px;
+        height: 10px;
+        margin-top: 7px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+
+      .highlight-copy strong,
+      .contact-copy strong {
+        display: block;
+        margin-bottom: 4px;
+        font-size: 1rem;
+      }
+
+      .highlight-copy span,
+      .contact-copy span {
+        color: var(--muted);
+        line-height: 1.5;
+        font-size: 0.98rem;
+      }
+
+      .contact-item a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+
+      .contact-item a:hover {
+        text-decoration: underline;
+      }
+
+      @media (min-width: 980px) {
+        .grid {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+
+      .build-footer {
+        margin-top: 28px;
+        padding-top: 22px;
+        border-top: 1px solid var(--line);
+      }
+
+      .build-summary {
+        cursor: pointer;
+        color: var(--muted);
+        font-size: 0.84rem;
+        line-height: 1.5;
+        letter-spacing: 0.02em;
+        list-style: none;
+      }
+
+      .build-summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .build-summary::before {
+        content: "Show build details";
+        display: inline-block;
+        margin-right: 10px;
+        color: var(--accent);
+        font-weight: 700;
+      }
+
+      details[open] .build-summary::before {
+        content: "Hide build details";
+      }
+
+      .build-details-body {
+        margin-top: 14px;
+      }
+
+      .build-details-body .grid {
+        margin-top: 0;
+      }
+
+      .footer-note {
+        margin-top: 12px;
+        font-size: 0.95rem;
+      }
+    </style>
+  </head>
+  <body>
+    <nav>
+      <div class="nav-shell">
+        <h1 class="brand">DevOps Platform</h1>
+        <div class="nav-links">
+          <a href="/" class="nav-link">Overview</a>
+          <a href="/portfolio" class="nav-link">Projects</a>
+          <a href="/services" class="nav-link">Services</a>
+          <a href="/incidents" class="nav-link">Incidents</a>
+          <a href="/ai" class="nav-link">Incident Assistant</a>
+          <a href="/resume" class="nav-link active">Resume</a>
+        </div>
+      </div>
+    </nav>
+
+    <div class="page-shell">
+      <main>
+        <p class="eyebrow">Professional Profile</p>
+        <h1>Resume</h1>
+        <p>
+          Senior DevOps Engineer and Technical Lead with extensive experience in cloud infrastructure, CI/CD, and enterprise systems.
+        </p>
+
+        <div class="portfolio-intro">
+          <section class="panel">
+            <p class="eyebrow">Professional Summary</p>
+            <h2>Senior DevOps / Platform Engineer</h2>
+            <p>
+              Senior DevOps Engineer and Technical Lead with 14 years of experience across cloud infrastructure,
+              CI/CD, enterprise systems, and production support. Strong background in Azure, automation,
+              reliability, and cross-functional delivery for business-critical platforms in large-scale Oil & Gas environments.
+            </p>
+          </section>
+
+          <div class="grid">
+            <section class="panel">
+              <p class="eyebrow">Career Highlights</p>
+              <h2>Experience Snapshot</h2>
+              <div class="highlight-list">
+                <div class="highlight-item">
+                  <span class="highlight-mark"></span>
+                  <div class="highlight-copy">
+                    <strong>14 years across DevOps, architecture, infrastructure, and enterprise systems</strong>
+                    <span>Career span covering platform engineering, production support, automation, GIS, and system leadership.</span>
+                  </div>
+                </div>
+                <div class="highlight-item">
+                  <span class="highlight-mark"></span>
+                  <div class="highlight-copy">
+                    <strong>System Architect / Technical Lead at Tengizchevroil (Chevron)</strong>
+                    <span>Owned delivery, modernization, and operational readiness for enterprise-scale Azure-based systems.</span>
+                  </div>
+                </div>
+                <div class="highlight-item">
+                  <span class="highlight-mark"></span>
+                  <div class="highlight-copy">
+                    <strong>Owned CI/CD, deployment automation, and production support in Azure</strong>
+                    <span>Built and improved pipelines, environment governance, testing integration, and release reliability.</span>
+                  </div>
+                </div>
+                <div class="highlight-item">
+                  <span class="highlight-mark"></span>
+                  <div class="highlight-copy">
+                    <strong>Improved critical data-intensive queries from 7+ minutes to under 1 second</strong>
+                    <span>Applied architecture and database-level optimization for 100M+ record enterprise datasets.</span>
+                  </div>
+                </div>
+                <div class="highlight-item">
+                  <span class="highlight-mark"></span>
+                  <div class="highlight-copy">
+                    <strong>Introduced Playwright automation into delivery pipelines</strong>
+                    <span>Integrated UI test coverage into PR and post-deploy flows to catch regressions earlier.</span>
+                  </div>
+                </div>
+                <div class="highlight-item">
+                  <span class="highlight-mark"></span>
+                  <div class="highlight-copy">
+                    <strong>Hands-on with Azure, Kubernetes, Terraform, Ansible, Docker, and CI/CD</strong>
+                    <span>Comfortable across cloud, platform automation, infrastructure as code, and operational ownership.</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="panel">
+              <p class="eyebrow">Contact</p>
+              <h2>Let&apos;s Connect</h2>
+              <p>Professional links and contact information.</p>
+              <div class="contact-list">
+                <div class="contact-item">
+                  <div class="contact-copy">
+                    <strong>GitHub</strong>
+                    <span><a href="https://github.com/bkolubenka" target="_blank" rel="noreferrer">github.com/bkolubenka</a></span>
+                  </div>
+                </div>
+                <div class="contact-item">
+                  <div class="contact-copy">
+                    <strong>LinkedIn</strong>
+                    <span><a href="https://www.linkedin.com/in/kydyrov/" target="_blank" rel="noreferrer">linkedin.com/in/kydyrov</a></span>
+                  </div>
+                </div>
+                <div class="contact-item">
+                  <div class="contact-copy">
+                    <strong>Email</strong>
+                    <span><a href="mailto:bkolubenka@gmail.com">bkolubenka@gmail.com</a></span>
+                  </div>
+                </div>
+                <div class="contact-item">
+                  <div class="contact-copy">
+                    <strong>Resume PDF</strong>
+                    <span><a href="/resume/resume.pdf" target="_blank" rel="noreferrer">Download full resume</a></span>
+                  </div>
+                </div>
+                <div class="contact-item">
+                  <div class="contact-copy">
+                    <strong>Location</strong>
+                    <span>Astana, Kazakhstan</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <footer class="build-footer">
+          <p class="eyebrow">Build Metadata</p>
+          <details id="build-footer-shell">
+            <summary id="build-footer-summary" class="build-summary">Loading deployment fingerprint...</summary>
+            <div id="build-footer" class="build-details-body"></div>
+          </details>
+        </footer>
+      </main>
+    </div>
+
+    <script>
+      // Simple script to load build footer, similar to main page
+      async function loadBuildFooter() {
+        const footer = document.getElementById("build-footer");
+        const footerSummary = document.getElementById("build-footer-summary");
+        try {
+          const response = await fetch("/api/health");
+          if (response.ok) {
+            const data = await response.json();
+            footerSummary.textContent = `App: ${data.app_version || 'unknown'} | Image: ${data.image_tag || 'unknown'} | Build: ${data.build_id || 'unknown'}`;
+            footer.innerHTML = `
+              <div class="grid">
+                <div class="panel">
+                  <div class="label">Application</div>
+                  <div class="metric">${data.app_version || 'unknown'}</div>
+                </div>
+                <div class="panel">
+                  <div class="label">Image Tag</div>
+                  <div class="metric">${data.image_tag || 'unknown'}</div>
+                </div>
+                <div class="panel">
+                  <div class="label">Build ID</div>
+                  <div class="metric">${data.build_id || 'unknown'}</div>
+                </div>
+                <div class="panel">
+                  <div class="label">Deployed</div>
+                  <div class="metric">${new Date(data.deployed_at || Date.now()).toLocaleString()}</div>
+                </div>
+              </div>
+            `;
+          }
+        } catch (error) {
+          footerSummary.textContent = "Build metadata unavailable";
+        }
+      }
+
+      loadBuildFooter();
+    </script>
+  </body>
+</html>
