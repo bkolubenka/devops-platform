@@ -254,6 +254,19 @@
           cf_api_token_length={{ cf_api_token | length }}
       when: deploy_env == 'prod'
 
+    - name: Fail fast when DNS-01 token is missing and HTTP-01 fallback is disabled
+      fail:
+        msg: >-
+          SSL issuance is required, but DEPLOY_CF_API_TOKEN is empty and
+          DEPLOY_ALLOW_HTTP01_FALLBACK is false. Set CF_API_TOKEN in GitHub
+          secrets for DNS-01 (recommended), or explicitly set
+          DEPLOY_ALLOW_HTTP01_FALLBACK=true to attempt standalone HTTP-01.
+      when:
+        - deploy_env == 'prod'
+        - ssl_needs_issue | default(false) | bool
+        - cf_api_token | length == 0
+        - not (allow_http01_fallback | bool)
+
     - name: Validate dev repo_url is not a placeholder
       assert:
         that:
@@ -327,6 +340,7 @@
         - deploy_env == 'prod'
         - ssl_needs_issue | default(false) | bool
         - cf_api_token | length == 0
+        - allow_http01_fallback | bool
 
     - name: Obtain SSL certificate via standalone HTTP-01 challenge
       command: certbot certonly --standalone --agree-tos --email {{ ssl_email }} -d {{ domain_name }} -d {{ domain_www }} --non-interactive
@@ -336,6 +350,7 @@
         - deploy_env == 'prod'
         - ssl_needs_issue | default(false) | bool
         - cf_api_token | length == 0
+        - allow_http01_fallback | bool
 
     - name: Read letsencrypt log tail after certbot failure
       command: tail -80 /var/log/letsencrypt/letsencrypt.log
@@ -345,6 +360,7 @@
         - deploy_env == 'prod'
         - certbot_standalone_result is defined
         - certbot_standalone_result.rc | default(0) != 0
+        - allow_http01_fallback | bool
 
     - name: Fail with detailed certbot diagnostics
       fail:
@@ -358,6 +374,7 @@
       when:
         - deploy_env == 'prod'
         - certbot_standalone_result is defined
+        - allow_http01_fallback | bool
         - certbot_standalone_result.rc | default(0) != 0
 
     - name: Refresh letsencrypt SSL certificate status after issuance attempts

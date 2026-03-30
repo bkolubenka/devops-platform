@@ -40,6 +40,7 @@ ssl_email: "{{ lookup('env', 'DEPLOY_SSL_EMAIL') | default('bkolubenka@gmail.com
 
 # Cloudflare DNS-01 support (required when Cloudflare proxy is active)
 cf_api_token: "{{ lookup('env', 'DEPLOY_CF_API_TOKEN') | default(lookup('env', 'CF_API_TOKEN'), true) | default('', true) }}"
+allow_http01_fallback: "{{ lookup('env', 'DEPLOY_ALLOW_HTTP01_FALLBACK') | default('false', true) | bool }}"
 
 # Test environment settings
 domain_www: "www.{{ domain_name }}"
