@@ -1,40 +1,32 @@
-name: Deploy
+name: Auto Deploy Prod
 
 on:
-  workflow_dispatch:
-    inputs:
-      deploy_env:
-        description: "Compose environment to deploy"
-        required: true
-        default: dev
-        type: choice
-        options:
-          - dev
-          - prod
-      image_tag:
-        description: "Image tag to deploy in prod"
-        required: true
-        default: main
-        type: string
-      rollback_to_previous:
-        description: "Rollback prod to the previous recorded release"
-        required: true
-        default: false
-        type: boolean
+  workflow_run:
+    workflows:
+      - Publish Images
+    types:
+      - completed
 
 permissions:
   contents: read
   packages: read
 
+concurrency:
+  group: prod-deploy
+  cancel-in-progress: false
+
 jobs:
-  deploy:
+  deploy_prod:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' }}
     runs-on:
       - self-hosted
       - linux
 
     steps:
-      - name: Checkout repository
+      - name: Checkout repository at published commit
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -49,32 +41,17 @@ jobs:
       - name: Set deploy metadata
         id: deploy_meta
         run: |
+          echo "image_tag=$(echo '${{ github.event.workflow_run.head_sha }}' | cut -c1-12)" >> "$GITHUB_OUTPUT"
           echo "build_date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
 
-      - name: Validate production deploy contract
-        if: ${{ inputs.deploy_env == 'prod' }}
-        run: |
-          if [ "${{ inputs.rollback_to_previous }}" = "false" ]; then
-            if [ "${{ inputs.image_tag }}" = "main" ]; then
-              echo "Production deploys must use an immutable SHA tag, not 'main'."
-              exit 1
-            fi
-            if ! echo "${{ inputs.image_tag }}" | grep -Eq '^[0-9a-f]{7,40}$'; then
-              echo "Production deploys must use a SHA-like image tag."
-              exit 1
-            fi
-          fi
-
-      - name: Log in to GHCR for production deploys
-        if: ${{ inputs.deploy_env == 'prod' }}
+      - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Share GHCR auth with root for production deploys
-        if: ${{ inputs.deploy_env == 'prod' }}
+      - name: Share GHCR auth with root
         env:
           SUDO_PASS: ${{ secrets.BECOME_PASSWORD }}
         run: |
@@ -93,20 +70,20 @@ jobs:
           localhost ansible_connection=local ansible_python_interpreter=/usr/bin/python3
           EOF
 
-      - name: Run deploy playbook
+      - name: Run production deploy playbook
         env:
           ANSIBLE_BECOME_PASSWORD: ${{ secrets.BECOME_PASSWORD }}
-          DEPLOY_ENV: ${{ inputs.deploy_env }}
+          DEPLOY_ENV: prod
           DEPLOY_REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
-          DEPLOY_REPO_REF: ${{ github.ref_name }}
+          DEPLOY_REPO_REF: ${{ github.event.workflow_run.head_branch }}
           DEPLOY_GHCR_OWNER: ${{ github.repository_owner }}
-          DEPLOY_IMAGE_TAG: ${{ inputs.image_tag }}
+          DEPLOY_IMAGE_TAG: ${{ steps.deploy_meta.outputs.image_tag }}
           DEPLOY_APP_VERSION: 2.1.0
-          DEPLOY_BUILD_SHA: ${{ inputs.image_tag }}
+          DEPLOY_BUILD_SHA: ${{ github.event.workflow_run.head_sha }}
           DEPLOY_BUILD_DATE: ${{ steps.deploy_meta.outputs.build_date }}
           DEPLOY_BUILD_ID: ${{ github.run_id }}-${{ github.run_attempt }}
           DEPLOY_CONTAINER_REGISTRY: ghcr.io/${{ github.repository_owner }}
-          DEPLOY_ROLLBACK_TO_PREVIOUS: ${{ inputs.rollback_to_previous }}
+          DEPLOY_ROLLBACK_TO_PREVIOUS: false
           DEPLOY_DB_USER: devops_user
           DEPLOY_DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           DEPLOY_SECRET_KEY: ${{ secrets.SECRET_KEY }}
