@@ -159,10 +159,10 @@
 
     - name: Enforce immutable SHA-tagged production deploys
       fail:
-        msg: "Production deploys must use an immutable SHA image tag, not '{{ effective_image_tag }}'."
+        msg: "Production deploys must use the published 12-character SHA image tag, not '{{ effective_image_tag }}'."
       when:
         - deploy_env == 'prod'
-        - effective_image_tag == 'main' or effective_image_tag is not match('^[0-9a-f]{7,40}$')
+        - effective_image_tag == 'main' or effective_image_tag is not match('^[0-9a-f]{12}$')
 
     - name: Require real production domain settings
       fail:
@@ -180,6 +180,31 @@
         path: "{{ runtime_root }}/docker-compose.prod.yaml"
       register: prod_runtime_compose_stat
       when: deploy_env == 'prod'
+
+    - name: Resolve production domains to IPv4 addresses
+      shell: |
+        python3 - <<'PY'
+        import socket
+        domain = "{{ item }}"
+        ips = sorted({row[4][0] for row in socket.getaddrinfo(domain, 80, socket.AF_INET, socket.SOCK_STREAM)})
+        print(" ".join(ips))
+        PY
+      args:
+        executable: /bin/bash
+      register: resolved_domain_ipv4
+      changed_when: false
+      loop:
+        - "{{ domain_name }}"
+        - "{{ test_domain }}"
+      when: deploy_env == 'prod' and not prod_certificate_stat.stat.exists
+
+    - name: Validate domains point directly to origin before certbot
+      assert:
+        that:
+          - vps_public_ip in (item.stdout.split())
+        fail_msg: "Domain {{ item.item }} resolves to {{ item.stdout | default('none') }}, but expected {{ vps_public_ip }}. Set DNS A records to point directly to the VPS IP before certbot standalone."
+      loop: "{{ resolved_domain_ipv4.results }}"
+      when: deploy_env == 'prod' and not prod_certificate_stat.stat.exists
 
     - name: Validate dev repo_url is not a placeholder
       assert:
@@ -221,50 +246,8 @@
         - not prod_certificate_stat.stat.exists
         - prod_runtime_compose_stat.stat.exists
 
-    - name: Identify processes listening on port 80 before certbot
-      shell: set -o pipefail && ss -tlnp 'sport = :80' | tail -n +2
-      args:
-        executable: /bin/bash
-      register: port80_listeners
-      changed_when: false
-      when:
-        - deploy_env == 'prod'
-        - not prod_certificate_stat.stat.exists
-
-    - name: Kill remaining port 80 listeners
-      shell: |
-        set -o pipefail
-        ss -tlnp 'sport = :80' | grep -oP 'pid=\K[0-9]+' | sort -u | xargs -r kill
-      args:
-        executable: /bin/bash
-      changed_when: true
-      when:
-        - deploy_env == 'prod'
-        - not prod_certificate_stat.stat.exists
-        - (port80_listeners.stdout | default('') | trim) != ''
-
-    - name: Wait for port 80 to be released
-      wait_for:
-        port: 80
-        state: stopped
-        timeout: 30
-      when:
-        - deploy_env == 'prod'
-        - not prod_certificate_stat.stat.exists
-        - (port80_listeners.stdout | default('') | trim) != ''
-
     - name: Obtain SSL certificate for prod
-      command: >
-        certbot certonly --standalone
-        --non-interactive --agree-tos
-        --preferred-challenges http
-        --http-01-port 80
-        --email {{ ssl_email }}
-        -d {{ domain_name }}
-        -d {{ domain_www }}
-        -v
-      register: certbot_result
-      ignore_errors: true
+      command: certbot certonly --standalone --agree-tos --email {{ ssl_email }} -d {{ domain_name }}
       when: deploy_env == 'prod' and not prod_certificate_stat.stat.exists
 
     - name: Read letsencrypt log tail after certbot failure
@@ -338,6 +321,32 @@
         CONTAINER_REGISTRY: "{{ effective_container_registry }}"
       when: deploy_env == 'dev'
 
+    - name: Restart dev nginx to refresh upstream targets
+      command: docker compose --env-file .env.dev -f {{ compose_file }} restart nginx
+      args:
+        chdir: "{{ app_dir }}"
+      when: deploy_env == 'dev'
+
+    - name: Verify production image tags exist in GHCR
+      shell: docker manifest inspect ghcr.io/{{ ghcr_owner }}/devops-platform-{{ item }}:{{ effective_image_tag }} >/dev/null
+      args:
+        executable: /bin/bash
+      register: ghcr_image_manifest_checks
+      changed_when: false
+      failed_when: false
+      loop:
+        - backend
+        - frontend
+        - monitor-worker
+      when: deploy_env == 'prod'
+
+    - name: Fail when production image tag is not published to GHCR
+      fail:
+        msg: "Missing GHCR image tag '{{ effective_image_tag }}' for: {{ ghcr_image_manifest_checks.results | selectattr('rc', 'ne', 0) | map(attribute='item') | join(', ') }}. Publish images from main and use the published sha_short tag."
+      when:
+        - deploy_env == 'prod'
+        - (ghcr_image_manifest_checks.results | selectattr('rc', 'ne', 0) | list | length) > 0
+
     - name: Pull production images
       command: docker compose -f docker-compose.prod.yaml pull
       args:
@@ -365,7 +374,21 @@
         chdir: "{{ runtime_root }}"
       when: deploy_env == 'prod'
 
-    - name: Start production stack without
+    - name: Stop containers publishing 80 or 443 before starting production stack
+      shell: |
+        set -e
+        ids=$(docker ps --filter "publish=80" --filter "publish=443" --format '{{ "{{" }}.ID{{ "}}" }}' | sort -u)
+        if [ -n "$ids" ]; then
+          docker stop $ids
+        fi
+        echo "$ids"
+      args:
+        executable: /bin/bash
+      register: port_listener_stop_before_prod
+      changed_when: "(port_listener_stop_before_prod.stdout | trim) != ''"
+      when: deploy_env == 'prod'
+
+    - name: Start production stack
       command: docker compose -f docker-compose.prod.yaml up -d
       args:
         chdir: "{{ runtime_root }}"

@@ -34,9 +34,10 @@ nginx_ssl_port: 443
 # Health check
 healthcheck_url: "http://127.0.0.1/health"
 
-# Domain configuration
-domain_name: "kydyrov.dev"
-ssl_email: "admin@kydyrov.dev"
+# Domain configuration (update with your actual domain)
+domain_name: "{{ lookup('env', 'DEPLOY_DOMAIN_NAME') | default('kydyrov.dev', true) }}"
+ssl_email: "{{ lookup('env', 'DEPLOY_SSL_EMAIL') | default('bkolubenka@gmail.com', true) }}"
+vps_public_ip: "{{ lookup('env', 'DEPLOY_VPS_PUBLIC_IP') | default('204.168.184.213', true) }}"
 
 # Test environment settings
-test_domain: "test.kydyrov.dev"
+test_domain: "www.{{ domain_name }}"
