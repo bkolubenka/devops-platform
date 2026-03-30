@@ -14,6 +14,7 @@
       - certbot
       - python3-certbot-nginx
       - python3-certbot-dns-cloudflare
+      - ufw
 
   tasks:
     - name: Validate deploy environment
@@ -170,6 +171,36 @@
         msg: "Set domain_name and ssl_email to real production values before deploying prod."
       when: deploy_env == 'prod' and (domain_name == 'yourdomain.com' or ssl_email == 'admin@yourdomain.com')
 
+    # --- Firewall (UFW) configuration for production --------------------------
+
+    - name: Allow SSH through UFW (prevent lockout)
+      ufw:
+        rule: allow
+        port: '22'
+        proto: tcp
+      when: deploy_env == 'prod'
+
+    - name: Allow HTTP through UFW (certbot challenge and redirect)
+      ufw:
+        rule: allow
+        port: '80'
+        proto: tcp
+      when: deploy_env == 'prod'
+
+    - name: Allow HTTPS through UFW
+      ufw:
+        rule: allow
+        port: '443'
+        proto: tcp
+      when: deploy_env == 'prod'
+
+    - name: Enable UFW
+      ufw:
+        state: enabled
+      when: deploy_env == 'prod'
+
+    # ---------------------------------------------------------------------------
+
     - name: Check for letsencrypt production certificate
       stat:
         path: "/etc/letsencrypt/live/{{ domain_name }}/fullchain.pem"
@@ -289,7 +320,7 @@
         - cf_api_token | length == 0
 
     - name: Obtain SSL certificate via standalone HTTP-01 challenge
-      command: certbot certonly --standalone --agree-tos --email {{ ssl_email }} -d {{ domain_name }} --non-interactive
+      command: certbot certonly --standalone --agree-tos --email {{ ssl_email }} -d {{ domain_name }} -d {{ domain_www }} --non-interactive
       register: certbot_standalone_result
       failed_when: false
       when:
