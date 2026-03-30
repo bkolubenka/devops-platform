@@ -34,10 +34,9 @@ nginx_ssl_port: 443
 # Health check
 healthcheck_url: "http://127.0.0.1/health"
 
-# Domain configuration (update with your actual domain)
-domain_name: "yourdomain.com"
-domain_www: "www.{{ domain_name }}"
-ssl_email: "admin@yourdomain.com"
+# Domain configuration
+domain_name: "kydyrov.dev"
+ssl_email: "admin@kydyrov.dev"
 
 # Test environment settings
-test_domain: "test.yourdomain.com"
+test_domain: "test.kydyrov.dev"
