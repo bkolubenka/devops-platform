@@ -40,4 +40,5 @@ ssl_email: "{{ lookup('env', 'DEPLOY_SSL_EMAIL') | default('bkolubenka@gmail.com
 vps_public_ip: "{{ lookup('env', 'DEPLOY_VPS_PUBLIC_IP') | default('204.168.184.213', true) }}"
 
 # Test environment settings
-test_domain: "www.{{ domain_name }}"
+domain_www: "www.{{ domain_name }}"
+test_domain: "{{ domain_www }}"

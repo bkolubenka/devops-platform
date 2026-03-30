@@ -169,10 +169,21 @@
         msg: "Set domain_name and ssl_email to real production values before deploying prod."
       when: deploy_env == 'prod' and (domain_name == 'yourdomain.com' or ssl_email == 'admin@yourdomain.com')
 
-    - name: Check for existing production certificate
+    - name: Check for letsencrypt production certificate
       stat:
         path: "/etc/letsencrypt/live/{{ domain_name }}/fullchain.pem"
       register: prod_certificate_stat
+      when: deploy_env == 'prod'
+
+    - name: Check for runtime SSL certificate
+      stat:
+        path: "{{ runtime_root }}/ssl/fullchain.pem"
+      register: runtime_certificate_stat
+      when: deploy_env == 'prod'
+
+    - name: Determine whether SSL certificate issuance is needed
+      set_fact:
+        ssl_needs_issue: "{{ not (prod_certificate_stat.stat.exists | default(false)) and not (runtime_certificate_stat.stat.exists | default(false)) }}"
       when: deploy_env == 'prod'
 
     - name: Check for existing production runtime compose file
@@ -196,7 +207,7 @@
       loop:
         - "{{ domain_name }}"
         - "{{ test_domain }}"
-      when: deploy_env == 'prod' and not prod_certificate_stat.stat.exists
+      when: deploy_env == 'prod' and ssl_needs_issue
 
     - name: Validate domains point directly to origin before certbot
       assert:
@@ -204,7 +215,7 @@
           - vps_public_ip in (item.stdout.split())
         fail_msg: "Domain {{ item.item }} resolves to {{ item.stdout | default('none') }}, but expected {{ vps_public_ip }}. Set DNS A records to point directly to the VPS IP before certbot standalone."
       loop: "{{ resolved_domain_ipv4.results }}"
-      when: deploy_env == 'prod' and not prod_certificate_stat.stat.exists
+      when: deploy_env == 'prod' and ssl_needs_issue
 
     - name: Validate dev repo_url is not a placeholder
       assert:
@@ -243,12 +254,14 @@
         chdir: "{{ runtime_root }}"
       when:
         - deploy_env == 'prod'
-        - not prod_certificate_stat.stat.exists
+        - ssl_needs_issue
         - prod_runtime_compose_stat.stat.exists
 
     - name: Obtain SSL certificate for prod
       command: certbot certonly --standalone --agree-tos --email {{ ssl_email }} -d {{ domain_name }}
-      when: deploy_env == 'prod' and not prod_certificate_stat.stat.exists
+      register: certbot_result
+      failed_when: false
+      when: deploy_env == 'prod' and ssl_needs_issue
 
     - name: Read letsencrypt log tail after certbot failure
       command: tail -80 /var/log/letsencrypt/letsencrypt.log
@@ -257,7 +270,7 @@
       when:
         - deploy_env == 'prod'
         - certbot_result is defined
-        - certbot_result is failed
+        - certbot_result.rc | default(0) != 0
 
     - name: Fail with detailed certbot diagnostics
       fail:
@@ -273,9 +286,9 @@
       when:
         - deploy_env == 'prod'
         - certbot_result is defined
-        - certbot_result is failed
+        - certbot_result.rc | default(0) != 0
 
-    - name: Copy SSL certificates into runtime directory
+    - name: Copy SSL certificates from letsencrypt into runtime directory
       copy:
         src: "/etc/letsencrypt/live/{{ domain_name }}/{{ item }}"
         dest: "{{ runtime_root }}/ssl/{{ item }}"
@@ -284,7 +297,9 @@
       loop:
         - fullchain.pem
         - privkey.pem
-      when: deploy_env == 'prod'
+      when:
+        - deploy_env == 'prod'
+        - prod_certificate_stat.stat.exists | default(false)
 
     - name: Render prod runtime compose file
       template:
