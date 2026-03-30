@@ -12,7 +12,6 @@
       - git
     prod_packages:
       - certbot
-      - python3-certbot-nginx
       - python3-certbot-dns-cloudflare
       - ufw
 
@@ -208,6 +207,13 @@
       register: prod_certificate_stat
       when: deploy_env == 'prod'
 
+    - name: Check for letsencrypt production private key
+      stat:
+        path: "/etc/letsencrypt/live/{{ domain_name }}/privkey.pem"
+      become: true
+      register: prod_private_key_stat
+      when: deploy_env == 'prod'
+
     - name: Check for runtime SSL certificate
       stat:
         path: "{{ runtime_root }}/ssl/fullchain.pem"
@@ -215,24 +221,37 @@
       register: runtime_certificate_stat
       when: deploy_env == 'prod'
 
+    - name: Check for runtime SSL private key
+      stat:
+        path: "{{ runtime_root }}/ssl/privkey.pem"
+      become: true
+      register: runtime_private_key_stat
+      when: deploy_env == 'prod'
+
+    - name: Set SSL source/runtime readiness flags
+      set_fact:
+        ssl_source_cert_ready: "{{ (prod_certificate_stat.stat.exists | default(false)) and (prod_private_key_stat.stat.exists | default(false)) }}"
+        ssl_runtime_cert_ready: "{{ (runtime_certificate_stat.stat.exists | default(false)) and (runtime_private_key_stat.stat.exists | default(false)) }}"
+      when: deploy_env == 'prod'
+
     - name: Determine whether SSL certificate issuance is needed
       set_fact:
-        ssl_needs_issue: "{{ not (prod_certificate_stat.stat.exists | default(false)) and not (runtime_certificate_stat.stat.exists | default(false)) }}"
+        ssl_needs_issue: "{{ not ssl_source_cert_ready }}"
+        ssl_needs_runtime_sync: "{{ ssl_source_cert_ready and (not ssl_runtime_cert_ready) }}"
       when: deploy_env == 'prod'
 
     - name: Debug SSL certificate detection
       debug:
         msg: |
           prod_cert_exists={{ prod_certificate_stat.stat.exists | default('undefined') }}
+          prod_key_exists={{ prod_private_key_stat.stat.exists | default('undefined') }}
           runtime_cert_exists={{ runtime_certificate_stat.stat.exists | default('undefined') }}
+          runtime_key_exists={{ runtime_private_key_stat.stat.exists | default('undefined') }}
+          ssl_source_cert_ready={{ ssl_source_cert_ready }}
+          ssl_runtime_cert_ready={{ ssl_runtime_cert_ready }}
           ssl_needs_issue={{ ssl_needs_issue }}
+          ssl_needs_runtime_sync={{ ssl_needs_runtime_sync }}
           cf_api_token_length={{ cf_api_token | length }}
-      when: deploy_env == 'prod'
-
-    - name: Check for existing production runtime compose file
-      stat:
-        path: "{{ runtime_root }}/docker-compose.prod.yaml"
-      register: prod_runtime_compose_stat
       when: deploy_env == 'prod'
 
     - name: Validate dev repo_url is not a placeholder
@@ -270,33 +289,23 @@
 
     - name: Write Cloudflare DNS credentials file for certbot
       copy:
-        dest: "{{ runtime_root }}/ssl/cf-credentials.ini"
+        dest: /etc/letsencrypt/cloudflare.ini
         content: "dns_cloudflare_api_token = {{ cf_api_token }}\n"
         mode: "0600"
       when:
         - deploy_env == 'prod'
-        - ssl_needs_issue | default(false) | bool
         - cf_api_token | length > 0
 
     - name: Obtain SSL certificate via Cloudflare DNS-01 challenge
       command: >-
         certbot certonly
         --dns-cloudflare
-        --dns-cloudflare-credentials {{ runtime_root }}/ssl/cf-credentials.ini
+        --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini
         --dns-cloudflare-propagation-seconds 30
         --agree-tos --email {{ ssl_email }}
         -d {{ domain_name }} -d {{ domain_www }}
         --non-interactive
       register: certbot_dns_result
-      when:
-        - deploy_env == 'prod'
-        - ssl_needs_issue | default(false) | bool
-        - cf_api_token | length > 0
-
-    - name: Remove Cloudflare credentials file after issuance
-      file:
-        path: "{{ runtime_root }}/ssl/cf-credentials.ini"
-        state: absent
       when:
         - deploy_env == 'prod'
         - ssl_needs_issue | default(false) | bool
@@ -351,6 +360,24 @@
         - certbot_standalone_result is defined
         - certbot_standalone_result.rc | default(0) != 0
 
+    - name: Refresh letsencrypt SSL certificate status after issuance attempts
+      stat:
+        path: "/etc/letsencrypt/live/{{ domain_name }}/{{ item }}"
+      become: true
+      register: letsencrypt_runtime_files_after_issue
+      loop:
+        - fullchain.pem
+        - privkey.pem
+      when: deploy_env == 'prod'
+
+    - name: Ensure letsencrypt source files are available before runtime sync
+      fail:
+        msg: "Missing letsencrypt SSL files for {{ domain_name }} after issuance attempt. Cannot sync runtime SSL certificates."
+      when:
+        - deploy_env == 'prod'
+        - (letsencrypt_runtime_files_after_issue.results | selectattr('stat.exists', 'equalto', false) | list | length) > 0
+        - ssl_needs_issue | default(false) | bool
+
     - name: Copy SSL certificates from letsencrypt into runtime directory
       copy:
         src: "/etc/letsencrypt/live/{{ domain_name }}/{{ item }}"
@@ -362,7 +389,7 @@
         - privkey.pem
       when:
         - deploy_env == 'prod'
-        - ssl_needs_issue | default(false) | bool
+        - ssl_needs_issue | default(false) | bool or ssl_needs_runtime_sync | default(false) | bool
 
     - name: Render prod runtime compose file
       template:
