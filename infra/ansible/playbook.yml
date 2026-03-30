@@ -267,7 +267,7 @@
           when: (port80_listeners.stdout | trim) != ''
 
         - name: Request certbot certificate for domain and www
-          command: certbot certonly --standalone --non-interactive --agree-tos --preferred-challenges http --http-01-address {{ vps_public_ip }} --http-01-port 80 --email {{ ssl_email }} -d {{ domain_name }} -d {{ test_domain }} -v
+          command: certbot certonly --standalone --non-interactive --agree-tos --preferred-challenges http --http-01-port 80 --email {{ ssl_email }} -d {{ domain_name }} -d {{ test_domain }} -v
       rescue:
         - name: Read letsencrypt log tail after certbot failure
           command: tail -n 80 /var/log/letsencrypt/letsencrypt.log
