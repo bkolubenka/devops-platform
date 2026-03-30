@@ -1,7 +1,21 @@
 server {
     listen 80;
-    server_name {{ domain_name }} {{ test_domain }};
-    return 301 https://$host$request_uri;
+    server_name {{ domain_name }} {{ domain_www }} {{ test_domain }};
+    return 301 https://{{ domain_name }}$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name {{ domain_www }};
+
+    ssl_certificate /etc/ssl/certs/fullchain.pem;
+    ssl_certificate_key /etc/ssl/certs/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers off;
+
+    return 301 https://{{ domain_name }}$request_uri;
 }
 
 server {
