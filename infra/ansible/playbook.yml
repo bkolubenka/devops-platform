@@ -173,18 +173,29 @@
     - name: Check for letsencrypt production certificate
       stat:
         path: "/etc/letsencrypt/live/{{ domain_name }}/fullchain.pem"
+      become: true
       register: prod_certificate_stat
       when: deploy_env == 'prod'
 
     - name: Check for runtime SSL certificate
       stat:
         path: "{{ runtime_root }}/ssl/fullchain.pem"
+      become: true
       register: runtime_certificate_stat
       when: deploy_env == 'prod'
 
     - name: Determine whether SSL certificate issuance is needed
       set_fact:
         ssl_needs_issue: "{{ not (prod_certificate_stat.stat.exists | default(false)) and not (runtime_certificate_stat.stat.exists | default(false)) }}"
+      when: deploy_env == 'prod'
+
+    - name: Debug SSL certificate detection
+      debug:
+        msg: |
+          prod_cert_exists={{ prod_certificate_stat.stat.exists | default('undefined') }}
+          runtime_cert_exists={{ runtime_certificate_stat.stat.exists | default('undefined') }}
+          ssl_needs_issue={{ ssl_needs_issue }}
+          cf_api_token_length={{ cf_api_token | length }}
       when: deploy_env == 'prod'
 
     - name: Check for existing production runtime compose file
