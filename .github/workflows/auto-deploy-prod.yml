@@ -86,6 +86,7 @@ jobs:
           DEPLOY_DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           DEPLOY_SECRET_KEY: ${{ secrets.SECRET_KEY }}
           DEPLOY_CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          DEPLOY_ALLOW_HTTP01_FALLBACK: false
         run: |
           ANSIBLE_LOCAL_TEMP=/tmp/.ansible/tmp \
           ansible-playbook \
