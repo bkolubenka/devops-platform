@@ -13,6 +13,7 @@
     prod_packages:
       - certbot
       - python3-certbot-nginx
+      - python3-certbot-dns-cloudflare
 
   tasks:
     - name: Validate deploy environment
@@ -192,31 +193,6 @@
       register: prod_runtime_compose_stat
       when: deploy_env == 'prod'
 
-    - name: Resolve production domains to IPv4 addresses
-      shell: |
-        python3 - <<'PY'
-        import socket
-        domain = "{{ item }}"
-        ips = sorted({row[4][0] for row in socket.getaddrinfo(domain, 80, socket.AF_INET, socket.SOCK_STREAM)})
-        print(" ".join(ips))
-        PY
-      args:
-        executable: /bin/bash
-      register: resolved_domain_ipv4
-      changed_when: false
-      loop:
-        - "{{ domain_name }}"
-        - "{{ test_domain }}"
-      when: deploy_env == 'prod' and ssl_needs_issue
-
-    - name: Validate domains point directly to origin before certbot
-      assert:
-        that:
-          - vps_public_ip in (item.stdout.split())
-        fail_msg: "Domain {{ item.item }} resolves to {{ item.stdout | default('none') }}, but expected {{ vps_public_ip }}. Set DNS A records to point directly to the VPS IP before certbot standalone."
-      loop: "{{ resolved_domain_ipv4.results }}"
-      when: deploy_env == 'prod' and ssl_needs_issue
-
     - name: Validate dev repo_url is not a placeholder
       assert:
         that:
@@ -248,20 +224,67 @@
         update: true
       when: deploy_env == 'dev'
 
-    - name: Stop existing production nginx before standalone certbot
-      command: docker compose -f docker-compose.prod.yaml stop nginx
-      args:
-        chdir: "{{ runtime_root }}"
+    # --- SSL certificate issuance (Cloudflare DNS-01 or standalone) ----------
+
+    - name: Write Cloudflare DNS credentials file for certbot
+      copy:
+        dest: "{{ runtime_root }}/ssl/cf-credentials.ini"
+        content: "dns_cloudflare_api_token = {{ cf_api_token }}\n"
+        mode: "0600"
       when:
         - deploy_env == 'prod'
-        - ssl_needs_issue
-        - prod_runtime_compose_stat.stat.exists
+        - ssl_needs_issue | default(false) | bool
+        - cf_api_token | length > 0
 
-    - name: Obtain SSL certificate for prod
-      command: certbot certonly --standalone --agree-tos --email {{ ssl_email }} -d {{ domain_name }}
-      register: certbot_result
+    - name: Obtain SSL certificate via Cloudflare DNS-01 challenge
+      command: >-
+        certbot certonly
+        --dns-cloudflare
+        --dns-cloudflare-credentials {{ runtime_root }}/ssl/cf-credentials.ini
+        --dns-cloudflare-propagation-seconds 30
+        --agree-tos --email {{ ssl_email }}
+        -d {{ domain_name }} -d {{ domain_www }}
+        --non-interactive
+      register: certbot_dns_result
+      when:
+        - deploy_env == 'prod'
+        - ssl_needs_issue | default(false) | bool
+        - cf_api_token | length > 0
+
+    - name: Remove Cloudflare credentials file after issuance
+      file:
+        path: "{{ runtime_root }}/ssl/cf-credentials.ini"
+        state: absent
+      when:
+        - deploy_env == 'prod'
+        - ssl_needs_issue | default(false) | bool
+        - cf_api_token | length > 0
+
+    - name: Stop containers on ports 80 and 443 before standalone certbot
+      shell: |
+        set -e
+        ids=$(docker ps --filter "publish=80" --filter "publish=443" --format '{{ "{{" }}.ID{{ "}}" }}' | sort -u)
+        if [ -n "$ids" ]; then
+          docker stop $ids
+        fi
+        echo "$ids"
+      args:
+        executable: /bin/bash
+      register: port_stop_for_certbot
+      changed_when: "(port_stop_for_certbot.stdout | trim) != ''"
+      when:
+        - deploy_env == 'prod'
+        - ssl_needs_issue | default(false) | bool
+        - cf_api_token | length == 0
+
+    - name: Obtain SSL certificate via standalone HTTP-01 challenge
+      command: certbot certonly --standalone --agree-tos --email {{ ssl_email }} -d {{ domain_name }} --non-interactive
+      register: certbot_standalone_result
       failed_when: false
-      when: deploy_env == 'prod' and ssl_needs_issue
+      when:
+        - deploy_env == 'prod'
+        - ssl_needs_issue | default(false) | bool
+        - cf_api_token | length == 0
 
     - name: Read letsencrypt log tail after certbot failure
       command: tail -80 /var/log/letsencrypt/letsencrypt.log
@@ -269,24 +292,22 @@
       changed_when: false
       when:
         - deploy_env == 'prod'
-        - certbot_result is defined
-        - certbot_result.rc | default(0) != 0
+        - certbot_standalone_result is defined
+        - certbot_standalone_result.rc | default(0) != 0
 
     - name: Fail with detailed certbot diagnostics
       fail:
         msg: >-
-          Certbot challenge failed.
-          Ensure DNS A records for {{ domain_name }} and {{ domain_www }}
-          point directly to this server (DNS-only, not proxied through a CDN).
-          If using Cloudflare, temporarily set the DNS records to "DNS only"
-          (grey cloud) so HTTP-01 challenges on port 80 can reach this server
-          without being redirected to HTTPS.
-          Certbot stderr: {{ certbot_result.stderr | default('unavailable') }}
+          Certbot standalone challenge failed.
+          If Cloudflare proxy is active (orange cloud), standalone HTTP-01
+          cannot work. Set the CF_API_TOKEN secret to use DNS-01 instead,
+          or temporarily disable Cloudflare proxy (grey cloud) during deploy.
+          Certbot stderr: {{ certbot_standalone_result.stderr | default('unavailable') }}
           Log tail: {{ le_log_tail.stdout | default('unavailable') }}
       when:
         - deploy_env == 'prod'
-        - certbot_result is defined
-        - certbot_result.rc | default(0) != 0
+        - certbot_standalone_result is defined
+        - certbot_standalone_result.rc | default(0) != 0
 
     - name: Copy SSL certificates from letsencrypt into runtime directory
       copy:
@@ -299,7 +320,7 @@
         - privkey.pem
       when:
         - deploy_env == 'prod'
-        - prod_certificate_stat.stat.exists | default(false)
+        - ssl_needs_issue | default(false) | bool
 
     - name: Render prod runtime compose file
       template:
@@ -444,5 +465,5 @@
         name: "SSL certificate renewal"
         minute: "0"
         hour: "12"
-        job: "docker compose -f {{ runtime_root }}/docker-compose.prod.yaml stop nginx; certbot renew --quiet; docker compose -f {{ runtime_root }}/docker-compose.prod.yaml start nginx"
+        job: "certbot renew --quiet --deploy-hook 'cp /etc/letsencrypt/live/{{ domain_name }}/fullchain.pem {{ runtime_root }}/ssl/fullchain.pem; cp /etc/letsencrypt/live/{{ domain_name }}/privkey.pem {{ runtime_root }}/ssl/privkey.pem; chmod 600 {{ runtime_root }}/ssl/*.pem; docker compose -f {{ runtime_root }}/docker-compose.prod.yaml restart nginx'"
       when: deploy_env == 'prod'

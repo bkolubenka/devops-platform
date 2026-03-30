@@ -39,6 +39,9 @@ domain_name: "{{ lookup('env', 'DEPLOY_DOMAIN_NAME') | default('kydyrov.dev', tr
 ssl_email: "{{ lookup('env', 'DEPLOY_SSL_EMAIL') | default('bkolubenka@gmail.com', true) }}"
 vps_public_ip: "{{ lookup('env', 'DEPLOY_VPS_PUBLIC_IP') | default('204.168.184.213', true) }}"
 
+# Cloudflare DNS-01 support (required when Cloudflare proxy is active)
+cf_api_token: "{{ lookup('env', 'DEPLOY_CF_API_TOKEN') | default(lookup('env', 'CF_API_TOKEN'), true) | default('', true) }}"
+
 # Test environment settings
 domain_www: "www.{{ domain_name }}"
 test_domain: "{{ domain_www }}"

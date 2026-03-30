@@ -110,6 +110,7 @@ jobs:
           DEPLOY_DB_USER: devops_user
           DEPLOY_DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           DEPLOY_SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          DEPLOY_CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
         run: |
           ANSIBLE_LOCAL_TEMP=/tmp/.ansible/tmp \
           ansible-playbook \
