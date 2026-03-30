@@ -36,6 +36,7 @@ healthcheck_url: "http://127.0.0.1/health"
 
 # Domain configuration (update with your actual domain)
 domain_name: "yourdomain.com"
+domain_www: "www.{{ domain_name }}"
 ssl_email: "admin@yourdomain.com"
 
 # Test environment settings

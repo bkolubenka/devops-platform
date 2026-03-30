@@ -221,9 +221,76 @@
         - not prod_certificate_stat.stat.exists
         - prod_runtime_compose_stat.stat.exists
 
+    - name: Identify processes listening on port 80 before certbot
+      shell: set -o pipefail && ss -tlnp 'sport = :80' | tail -n +2
+      args:
+        executable: /bin/bash
+      register: port80_listeners
+      changed_when: false
+      when:
+        - deploy_env == 'prod'
+        - not prod_certificate_stat.stat.exists
+
+    - name: Kill remaining port 80 listeners
+      shell: |
+        set -o pipefail
+        ss -tlnp 'sport = :80' | grep -oP 'pid=\K[0-9]+' | sort -u | xargs -r kill
+      args:
+        executable: /bin/bash
+      changed_when: true
+      when:
+        - deploy_env == 'prod'
+        - not prod_certificate_stat.stat.exists
+        - (port80_listeners.stdout | default('') | trim) != ''
+
+    - name: Wait for port 80 to be released
+      wait_for:
+        port: 80
+        state: stopped
+        timeout: 30
+      when:
+        - deploy_env == 'prod'
+        - not prod_certificate_stat.stat.exists
+        - (port80_listeners.stdout | default('') | trim) != ''
+
     - name: Obtain SSL certificate for prod
-      command: certbot certonly --standalone --agree-tos --email {{ ssl_email }} -d {{ domain_name }}
+      command: >
+        certbot certonly --standalone
+        --non-interactive --agree-tos
+        --preferred-challenges http
+        --http-01-port 80
+        --email {{ ssl_email }}
+        -d {{ domain_name }}
+        -d {{ domain_www }}
+        -v
+      register: certbot_result
+      ignore_errors: true
       when: deploy_env == 'prod' and not prod_certificate_stat.stat.exists
+
+    - name: Read letsencrypt log tail after certbot failure
+      command: tail -80 /var/log/letsencrypt/letsencrypt.log
+      register: le_log_tail
+      changed_when: false
+      when:
+        - deploy_env == 'prod'
+        - certbot_result is defined
+        - certbot_result is failed
+
+    - name: Fail with detailed certbot diagnostics
+      fail:
+        msg: >-
+          Certbot challenge failed.
+          Ensure DNS A records for {{ domain_name }} and {{ domain_www }}
+          point directly to this server (DNS-only, not proxied through a CDN).
+          If using Cloudflare, temporarily set the DNS records to "DNS only"
+          (grey cloud) so HTTP-01 challenges on port 80 can reach this server
+          without being redirected to HTTPS.
+          Certbot stderr: {{ certbot_result.stderr | default('unavailable') }}
+          Log tail: {{ le_log_tail.stdout | default('unavailable') }}
+      when:
+        - deploy_env == 'prod'
+        - certbot_result is defined
+        - certbot_result is failed
 
     - name: Copy SSL certificates into runtime directory
       copy:
@@ -339,5 +406,5 @@
         name: "SSL certificate renewal"
         minute: "0"
         hour: "12"
-        job: "certbot renew --quiet && docker compose -f {{ runtime_root }}/docker-compose.prod.yaml restart nginx"
+        job: "docker compose -f {{ runtime_root }}/docker-compose.prod.yaml stop nginx; certbot renew --quiet; docker compose -f {{ runtime_root }}/docker-compose.prod.yaml start nginx"
       when: deploy_env == 'prod'
