@@ -172,20 +172,24 @@ Temporary mode note:
 
 GitHub Actions deploy:
 
-- runs on a self-hosted runner installed on the VM
-- executes the Ansible playbook locally on that VM
-- is triggered manually with `workflow_dispatch`
-- also supports automatic prod deploy after successful `Publish Images` on `main`
+- runs on self-hosted runners with automatic environment-based routing:
+  - **Dev deploys** → `vm-1` runner (local VirtualBox VM)
+  - **Prod deploys** → `vps-1` runner (remote VPS)
+- executes the Ansible playbook locally on the respective runner
+- is triggered manually with `workflow_dispatch` (dev or prod selector)
+- also supports automatic prod deploy after successful `Publish Images` on `main` (always uses `vps-1`)
 - auto deploy uses the published commit SHA (short tag) as the production image tag
 - keeps dev source-based and repo-synced on the VM
 - renders prod runtime files under `/opt/devops-platform`
 - pulls GHCR app images for prod and deploys them without destructive `down/prune` steps
 - records `current_release.env` and `previous_release.env` on the server for rollback metadata
+- See [.github/RUNNER_SETUP.md](.github/RUNNER_SETUP.md) for runner registration and labeling instructions
 
 Branch policy:
 
 - CI runs on every push and pull request, including `feat/*` branches
 - deploy does not run on feature branches
+- feature branches cannot trigger auto-deploy (main-only)
 
 Required GitHub secret:
 

@@ -28,9 +28,7 @@ permissions:
 
 jobs:
   deploy:
-    runs-on:
-      - self-hosted
-      - linux
+    runs-on: ${{ inputs.deploy_env == 'prod' && 'vps-1' || 'vm-1' }}
 
     steps:
       - name: Checkout repository
