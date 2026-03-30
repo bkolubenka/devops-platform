@@ -247,7 +247,7 @@
       wait_for:
         port: 80
         state: stopped
-        timeout: 15
+        timeout: 30
       when:
         - deploy_env == 'prod'
         - not prod_certificate_stat.stat.exists
@@ -285,6 +285,7 @@
           If using Cloudflare, temporarily set the DNS records to "DNS only"
           (grey cloud) so HTTP-01 challenges on port 80 can reach this server
           without being redirected to HTTPS.
+          Certbot stderr: {{ certbot_result.stderr | default('unavailable') }}
           Log tail: {{ le_log_tail.stdout | default('unavailable') }}
       when:
         - deploy_env == 'prod'
@@ -405,5 +406,5 @@
         name: "SSL certificate renewal"
         minute: "0"
         hour: "12"
-        job: "docker compose -f {{ runtime_root }}/docker-compose.prod.yaml stop nginx && certbot renew --quiet && docker compose -f {{ runtime_root }}/docker-compose.prod.yaml start nginx"
+        job: "docker compose -f {{ runtime_root }}/docker-compose.prod.yaml stop nginx; certbot renew --quiet; docker compose -f {{ runtime_root }}/docker-compose.prod.yaml start nginx"
       when: deploy_env == 'prod'
