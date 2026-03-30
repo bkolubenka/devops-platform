@@ -37,7 +37,11 @@ healthcheck_url: "http://127.0.0.1/health"
 # Domain configuration (update with your actual domain)
 domain_name: "{{ lookup('env', 'DEPLOY_DOMAIN_NAME') | default('kydyrov.dev', true) }}"
 ssl_email: "{{ lookup('env', 'DEPLOY_SSL_EMAIL') | default('bkolubenka@gmail.com', true) }}"
-vps_public_ip: "{{ lookup('env', 'DEPLOY_VPS_PUBLIC_IP') | default('204.168.184.213', true) }}"
+
+# Cloudflare DNS-01 support (required when Cloudflare proxy is active)
+cf_api_token: "{{ lookup('env', 'DEPLOY_CF_API_TOKEN') | default(lookup('env', 'CF_API_TOKEN'), true) | default('', true) }}"
+allow_http01_fallback: "{{ lookup('env', 'DEPLOY_ALLOW_HTTP01_FALLBACK') | default('false', true) | bool }}"
 
 # Test environment settings
-test_domain: "www.{{ domain_name }}"
+domain_www: "www.{{ domain_name }}"
+test_domain: "{{ domain_www }}"

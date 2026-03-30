@@ -7,11 +7,16 @@ Keep changes aligned with the current VM-based deployment model.
 - FastAPI backend serves `/health` and `/api/*`.
 - Static frontend is served by Nginx.
 - Dev and prod Nginx configs are separate.
-- Deploy runs on a self-hosted Linux runner on the VM and executes Ansible locally.
+- Deploy runs on self-hosted runners with automatic environment-based routing:
+  - Dev deploys use `vm-1` runner (local VirtualBox VM)
+  - Prod deploys use `vps-1` runner (remote VPS)
+- Runners are registered with labels matching their names (`vm-1`, `vps-1`).
+- Each runner executes the Ansible playbook locally on its respective environment.
 - Production app services are published to GHCR and pulled during deploy.
 - Production runtime files are rendered under `/opt/devops-platform`; prod should not depend on a repo checkout on the server.
 - GitHub Actions CI runs on every push and pull request, including `feat/*` branches.
 - Deploy is manual and should not run from feature branches.
+- Auto-deploy to prod happens after successful `Publish Images` on main (always uses `vps-1`).
 - `monitor-worker` is a non-critical service that records operational log entries for the incident assistant.
 - Alembic migrations own schema and release-bound data changes.
 
