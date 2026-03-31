@@ -26,13 +26,13 @@ jobs:
           pip install ansible
 
       - name: Install backend dependencies
-        run: pip install -r app/backend/requirements.txt
+        run: pip install -r apps/devops-platform/backend/requirements.txt
 
       - name: Validate backend syntax
-        run: python -m py_compile app/backend/main.py app/backend/database.py app/backend/models.py app/backend/monitor_worker.py
+        run: python -m py_compile apps/devops-platform/backend/main.py apps/devops-platform/backend/database.py apps/devops-platform/backend/models.py apps/devops-platform/backend/monitor_worker.py
 
       - name: Run backend unit tests
-        working-directory: app
+        working-directory: apps/devops-platform
         env:
           DATABASE_URL: "sqlite://"
         run: python -m pytest backend/tests/ -v --tb=short
@@ -43,7 +43,7 @@ jobs:
           ansible-playbook --syntax-check infra/ansible/playbook.yml -i infra/ansible/inventory.ini
 
       - name: Build and start dev stack
-        run: docker compose --env-file .env.dev -f docker-compose.dev.yaml up -d --build
+        run: docker compose --env-file apps/devops-platform/.env.dev -f apps/devops-platform/docker-compose.dev.yaml up -d --build
 
       - name: Run container smoke tests
         run: |
@@ -85,4 +85,4 @@ jobs:
 
       - name: Stop dev stack
         if: always()
-        run: docker compose --env-file .env.dev -f docker-compose.dev.yaml down -v
+        run: docker compose --env-file apps/devops-platform/.env.dev -f apps/devops-platform/docker-compose.dev.yaml down -v

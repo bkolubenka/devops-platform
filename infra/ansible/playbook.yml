@@ -306,7 +306,7 @@
     - name: Run dev docker compose build and deploy
       command: docker compose --env-file .env.dev -f {{ compose_file }} up -d --build
       args:
-        chdir: "{{ app_dir }}"
+        chdir: "{{ app_compose_dir }}"
       environment:
         GHCR_OWNER: "{{ ghcr_owner }}"
         IMAGE_TAG: "{{ effective_image_tag }}"
@@ -320,7 +320,7 @@
     - name: Restart dev nginx to refresh upstream targets
       command: docker compose --env-file .env.dev -f {{ compose_file }} restart nginx
       args:
-        chdir: "{{ app_dir }}"
+        chdir: "{{ app_compose_dir }}"
       when: deploy_env == 'dev'
 
     - name: Authenticate Docker with GHCR for production image pulls

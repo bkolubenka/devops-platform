@@ -1,6 +1,7 @@
 app_name: devops-platform
 app_base_dir: /home/make/apps
 app_dir: "{{ app_base_dir }}/{{ app_name }}"
+app_compose_dir: "{{ app_dir }}/apps/devops-platform"
 runtime_root: /opt/devops-platform
 runtime_release_dir: "{{ runtime_root }}/releases"
 runtime_current_release_file: "{{ runtime_release_dir }}/current_release.env"
