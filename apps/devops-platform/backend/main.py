@@ -42,6 +42,10 @@ COMPONENT_VERSIONS = {
     "Nginx": "1.27-alpine",
 }
 
+ENV_SHORT = {"development": "dev", "production": "production"}.get(
+    APP_ENVIRONMENT, APP_ENVIRONMENT
+)
+
 OLLAMA_ENABLED_ENV = "INCIDENT_ASSISTANT_USE_OLLAMA"
 OLLAMA_BASE_URL_ENV = "OLLAMA_BASE_URL"
 OLLAMA_MODEL_ENV = "OLLAMA_MODEL"
@@ -848,45 +852,35 @@ def compute_overview(db: Session) -> OverviewResponse:
 
     services = [
         build_service_overview(service)
-        for service in db.query(DBService).filter(DBService.is_active.is_(True)).all()
+        for service in db.query(DBService).filter(
+            DBService.is_active.is_(True),
+            DBService.environment.in_([ENV_SHORT, "all"]),
+        ).all()
     ]
     service_states = {service.name: service for service in services}
-    backend_ok = service_states.get("backend", ServiceOverview(
-        id=0,
-        name="backend",
-        service_type="api",
-        environment=APP_ENVIRONMENT,
-        status="unknown",
-        url=None,
-        health_endpoint=None,
-        owner=None,
-        healthy=False,
-        detail="service not registered",
-    )).healthy
-    frontend_ok = service_states.get("frontend", ServiceOverview(
-        id=0,
-        name="frontend",
-        service_type="web-ui",
-        environment=APP_ENVIRONMENT,
-        status="unknown",
-        url=None,
-        health_endpoint=None,
-        owner=None,
-        healthy=False,
-        detail="service not registered",
-    )).healthy
-    nginx_ok = service_states.get("nginx", ServiceOverview(
-        id=0,
-        name="nginx",
-        service_type="reverse-proxy",
-        environment=APP_ENVIRONMENT,
-        status="unknown",
-        url=None,
-        health_endpoint=None,
-        owner=None,
-        healthy=False,
-        detail="service not registered",
-    )).healthy
+
+    def _default_overview(name: str, service_type: str, default_healthy: bool = False,
+                          detail: str = "service not registered") -> ServiceOverview:
+        return ServiceOverview(
+            id=0, name=name, service_type=service_type, environment=APP_ENVIRONMENT,
+            status="unknown", url=None, health_endpoint=None, owner=None,
+            healthy=default_healthy, detail=detail,
+        )
+
+    backend_ok = service_states.get(
+        "backend", _default_overview("backend", "api"),
+    ).healthy
+    frontend_ok = service_states.get(
+        "frontend", _default_overview("frontend", "web-ui"),
+    ).healthy
+    # In production host Nginx serves traffic; if the request arrived it is working.
+    nginx_default_ok = APP_ENVIRONMENT == "production"
+    nginx_ok = service_states.get(
+        "nginx",
+        _default_overview("nginx", "reverse-proxy",
+                          default_healthy=nginx_default_ok,
+                          detail="host-managed proxy" if nginx_default_ok else "service not registered"),
+    ).healthy
 
     return OverviewResponse(
         backend_status="ok" if backend_ok else "error",
