@@ -1,7 +1,7 @@
 FROM nginx:1.27-alpine
 
 # Copy static files
-COPY app/frontend/ /usr/share/nginx/html/
+COPY frontend/ /usr/share/nginx/html/
 
 # Expose port
 EXPOSE 80

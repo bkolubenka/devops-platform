@@ -40,8 +40,8 @@ jobs:
       - name: Build and push backend image
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: app/backend/Dockerfile
+          context: apps/devops-platform
+          file: apps/devops-platform/backend/Dockerfile
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/devops-platform-backend:${{ steps.meta.outputs.sha_short }}
@@ -50,8 +50,8 @@ jobs:
       - name: Build and push frontend image
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: app/frontend/Dockerfile
+          context: apps/devops-platform
+          file: apps/devops-platform/frontend/Dockerfile
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/devops-platform-frontend:${{ steps.meta.outputs.sha_short }}
@@ -60,8 +60,8 @@ jobs:
       - name: Build and push monitor-worker image
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: app/backend/Dockerfile
+          context: apps/devops-platform
+          file: apps/devops-platform/backend/Dockerfile
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/devops-platform-monitor-worker:${{ steps.meta.outputs.sha_short }}
