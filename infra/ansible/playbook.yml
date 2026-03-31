@@ -538,7 +538,7 @@
       register: backend_health
       retries: 15
       delay: 4
-      until: backend_health is not failed and backend_health.json.status == "ok"
+      until: backend_health is not failed and (backend_health.json is defined) and (backend_health.json.status | default('') == "ok")
 
     - name: Update previous release metadata after successful deploy
       copy:
