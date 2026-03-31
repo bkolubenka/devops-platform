@@ -67,12 +67,20 @@
     - name: Gather service facts
       service_facts:
 
-    - name: Stop and disable system nginx when present
+    - name: Stop system nginx on dev (Docker nginx handles traffic)
       service:
         name: nginx
         state: stopped
         enabled: false
-      when: "'nginx.service' in ansible_facts.services"
+      when:
+        - deploy_env == 'dev'
+        - "'nginx.service' in ansible_facts.services"
+
+    - name: Remove default nginx site on prod
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      when: deploy_env == 'prod'
 
     - name: Set default effective release metadata
       set_fact:
@@ -97,7 +105,6 @@
       loop:
         - "{{ runtime_root }}"
         - "{{ runtime_release_dir }}"
-        - "{{ runtime_root }}/ssl"
       when: deploy_env == 'prod'
 
     - name: Check for current release metadata
@@ -167,7 +174,7 @@
         msg: "Set domain_name and ssl_email to real production values before deploying prod."
       when: deploy_env == 'prod' and (domain_name == 'yourdomain.com' or ssl_email == 'admin@yourdomain.com')
 
-    # --- SSL certificate sync (certs must already exist via bootstrap.yml) ----
+    # --- SSL certificate check (certs must already exist via bootstrap.yml) ---
 
     - name: Check for letsencrypt SSL certificate
       stat:
@@ -190,25 +197,6 @@
       when:
         - deploy_env == 'prod'
         - not (prod_certificate_stat.stat.exists | default(false)) or not (prod_private_key_stat.stat.exists | default(false))
-
-    - name: Check for runtime SSL certificate
-      stat:
-        path: "{{ runtime_root }}/ssl/fullchain.pem"
-      register: runtime_certificate_stat
-      when: deploy_env == 'prod'
-
-    - name: Sync SSL certificates to runtime directory
-      copy:
-        src: "/etc/letsencrypt/live/{{ domain_name }}/{{ item }}"
-        dest: "{{ runtime_root }}/ssl/{{ item }}"
-        remote_src: yes
-        mode: "0600"
-      loop:
-        - fullchain.pem
-        - privkey.pem
-      when:
-        - deploy_env == 'prod'
-        - not (runtime_certificate_stat.stat.exists | default(false))
 
     # ---------------------------------------------------------------------------
 
@@ -253,7 +241,7 @@
     - name: Render prod nginx config
       template:
         src: prod.conf.j2
-        dest: "{{ runtime_root }}/prod.conf"
+        dest: "/etc/nginx/conf.d/{{ domain_name }}.conf"
         mode: "0644"
       when: deploy_env == 'prod'
 
@@ -378,24 +366,21 @@
         chdir: "{{ runtime_root }}"
       when: deploy_env == 'prod'
 
-    - name: Stop containers publishing 80 or 443 before starting production stack
-      shell: |
-        set -e
-        ids=$(docker ps --filter "publish=80" --filter "publish=443" --format '{{ "{{" }}.ID{{ "}}" }}' | sort -u)
-        if [ -n "$ids" ]; then
-          docker stop $ids
-        fi
-        echo "$ids"
-      args:
-        executable: /bin/bash
-      register: port_listener_stop_before_prod
-      changed_when: "(port_listener_stop_before_prod.stdout | trim) != ''"
-      when: deploy_env == 'prod'
-
     - name: Start production stack
       command: docker compose -f docker-compose.prod.yaml up -d
       args:
         chdir: "{{ runtime_root }}"
+      when: deploy_env == 'prod'
+
+    - name: Validate nginx configuration
+      command: nginx -t
+      changed_when: false
+      when: deploy_env == 'prod'
+
+    - name: Reload nginx to pick up new configuration
+      service:
+        name: nginx
+        state: reloaded
       when: deploy_env == 'prod'
 
     - name: Wait for nginx port

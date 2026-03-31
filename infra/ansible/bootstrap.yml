@@ -38,6 +38,7 @@
           - docker-ce-cli
           - containerd.io
           - docker-compose-plugin
+          - nginx
           - certbot
           - python3-certbot-dns-cloudflare
           - ufw
@@ -81,15 +82,10 @@
 
     # --- SSL certificate issuance (Cloudflare DNS-01 or standalone) ----------
 
-    - name: Gather service facts
-      service_facts:
-
-    - name: Stop and disable system nginx when present
-      service:
-        name: nginx
-        state: stopped
-        enabled: false
-      when: "'nginx.service' in ansible_facts.services"
+    - name: Remove default nginx site
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
 
     - name: Check for existing letsencrypt certificate
       stat:
@@ -146,18 +142,10 @@
         - ssl_needs_issue | bool
         - cf_api_token | length > 0
 
-    - name: Stop containers on ports 80/443 before standalone certbot
-      shell: |
-        set -e
-        ids=$(docker ps --filter "publish=80" --filter "publish=443" --format '{{ "{{" }}.ID{{ "}}" }}' | sort -u)
-        if [ -n "$ids" ]; then
-          docker stop $ids
-        fi
-        echo "$ids"
-      args:
-        executable: /bin/bash
-      register: port_stop_for_certbot
-      changed_when: "(port_stop_for_certbot.stdout | trim) != ''"
+    - name: Stop nginx before standalone certbot
+      service:
+        name: nginx
+        state: stopped
       when:
         - ssl_needs_issue | bool
         - cf_api_token | length == 0
@@ -212,23 +200,13 @@
         msg: "SSL certificate for {{ domain_name }} is not present at /etc/letsencrypt/live/{{ domain_name }}/. Bootstrap cannot continue."
       when: (post_issue_cert_check.results | selectattr('stat.exists', 'equalto', false) | list | length) > 0
 
-    # --- Copy certs to runtime directory for nginx container ------------------
+    # --- Ensure nginx is running ----------------------------------------------
 
-    - name: Ensure runtime SSL directory exists
-      file:
-        path: "{{ runtime_root }}/ssl"
-        state: directory
-        mode: "0755"
-
-    - name: Copy SSL certificates to runtime directory
-      copy:
-        src: "/etc/letsencrypt/live/{{ domain_name }}/{{ item }}"
-        dest: "{{ runtime_root }}/ssl/{{ item }}"
-        remote_src: yes
-        mode: "0600"
-      loop:
-        - fullchain.pem
-        - privkey.pem
+    - name: Ensure nginx is started and enabled
+      service:
+        name: nginx
+        state: started
+        enabled: true
 
     # --- Auto-renewal cron ----------------------------------------------------
 
@@ -237,15 +215,15 @@
         name: "SSL certificate renewal"
         minute: "0"
         hour: "12"
-        job: "certbot renew --quiet --deploy-hook 'cp /etc/letsencrypt/live/{{ domain_name }}/fullchain.pem {{ runtime_root }}/ssl/fullchain.pem; cp /etc/letsencrypt/live/{{ domain_name }}/privkey.pem {{ runtime_root }}/ssl/privkey.pem; chmod 600 {{ runtime_root }}/ssl/*.pem; docker compose -f {{ runtime_root }}/docker-compose.prod.yaml restart nginx'"
+        job: "certbot renew --quiet --deploy-hook 'systemctl reload nginx'"
 
     - name: Bootstrap complete
       debug:
         msg: |
           Infrastructure bootstrap complete.
           - Docker installed and running
+          - Nginx installed and enabled
           - UFW enabled (22, 80, 443)
           - SSL certificate issued for {{ domain_name }} and {{ domain_www }}
-          - Certificates synced to {{ runtime_root }}/ssl/
           - Auto-renewal cron configured (daily 12:00 UTC)
           Next: run playbook.yml to deploy the application.
