@@ -1178,8 +1178,14 @@ def queue_service_action(db: Session, service: DBService, action: str) -> Servic
 
 @app.get("/health")
 @app.get("/api/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def health(db: Session = Depends(get_db)) -> dict[str, str]:
+    db_status = "ok"
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception:
+        db_status = "error"
+    overall = "ok" if db_status == "ok" else "degraded"
+    return {"status": overall, "database": db_status}
 
 
 @app.get("/metrics", include_in_schema=False)

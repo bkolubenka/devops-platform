@@ -120,3 +120,31 @@ Infrastructure is split into two Ansible playbooks:
 - add more Grafana dashboards (node-exporter host panels, per-service detail, database metrics)
 - extend incident history before adding a real LLM or RAG layer
 - add targeted tests for incident autofill and service actions
+
+## Observability Rules
+
+- Prometheus scrape config lives in `infra/monitoring/prometheus.yml` — update it when adding new metric endpoints.
+- Grafana dashboards are provisioned from `infra/monitoring/grafana/dashboards/` — export JSON from Grafana and commit it.
+- Node Exporter is part of both dev and prod compose stacks; it runs in host PID namespace with root filesystem mounted read-only.
+- Grafana has anonymous Viewer access enabled; do not change this without considering public dashboard visibility.
+- New scrape targets must be in the Docker Compose network so Prometheus can reach them by container name.
+- Keep Prometheus retention at 7 days to stay within the 40 GB disk budget.
+
+## Healthcheck Rules
+
+- The `/health` endpoint includes a database connectivity check and returns `{"status": "ok", "database": "ok"}` when healthy.
+- Docker Compose healthchecks and the Ansible deploy playbook rely on `status == "ok"` in the health response.
+- When extending the healthcheck, add new component keys (e.g. `"cache": "ok"`) and set `status` to `"degraded"` if any fail.
+- Do not add slow or external dependency checks to `/health` — it is polled frequently by healthchecks and load balancers.
+
+## Adding a New Service
+
+When adding a new service to the platform:
+
+1. Add it to both `docker-compose.dev.yaml` and `docker-compose.prod.yaml.j2`
+2. For prod: bind to `127.0.0.1:<port>`, join `app_network`, add to Nginx template upstream/location
+3. For dev: add to Docker Nginx `dev.conf` with Docker DNS resolution
+4. Add GHCR image build step to `publish-images.yml`
+5. Add image manifest check to the Ansible playbook
+6. Add Prometheus scrape target to `infra/monitoring/prometheus.yml` if the service exposes metrics
+7. Register the service via the API or portal so the monitor-worker can probe it

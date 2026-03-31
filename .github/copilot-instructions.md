@@ -82,3 +82,26 @@ Keep changes aligned with the current VM-based deployment model.
 - Do NOT suggest one-time manual fixes.
 - Deployment must remain idempotent.
 - Fix root causes in infrastructure code, not runtime hacks.
+
+## Observability & Monitoring
+
+- Prometheus config: `infra/monitoring/prometheus.yml`. Scrapes backend, monitor-worker, node-exporter.
+- Grafana dashboards are auto-provisioned from `infra/monitoring/grafana/dashboards/`.
+- Node Exporter runs in both dev and prod compose stacks (host PID namespace, read-only root mount).
+- Keep Prometheus retention at 7 days (disk budget constraint).
+- New metrics endpoints must be added as scrape targets and be in the Docker Compose network.
+
+## Healthcheck Contract
+
+- `/health` and `/api/health` return `{"status": "ok", "database": "ok"}` when healthy.
+- `status` is `"degraded"` if any component check fails.
+- Docker Compose healthchecks and Ansible deploy validation depend on `status == "ok"`.
+- Do not add slow external checks to `/health` — it is polled every 30 seconds by healthchecks.
+
+## Adding New Services
+
+- Add to both `docker-compose.dev.yaml` and `docker-compose.prod.yaml.j2`.
+- Prod services bind to `127.0.0.1:<port>` and join `app_network`.
+- Add Nginx routing: upstream + location in `prod.conf.j2` (prod) and `dev.conf` (dev).
+- Add GHCR build step to `publish-images.yml` and manifest check to the Ansible playbook.
+- Add Prometheus scrape target if the service exposes metrics.

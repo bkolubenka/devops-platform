@@ -149,24 +149,27 @@ infra/
 - `POST /api/ai/generate-text`
 - `GET /api/ai/models`
 
-## Local Run
+## Quickstart
+
+### 1. Clone and start dev
 
 ```bash
-cd apps/devops-platform
+git clone https://github.com/bkolubenka/devops-platform.git
+cd devops-platform/apps/devops-platform
 docker compose --env-file .env.dev -f docker-compose.dev.yaml up --build
 ```
 
-Then open:
+Open:
 
-- `http://localhost/`
-- `http://localhost/health`
-- `http://localhost/api/portfolio/projects`
-- `http://localhost/grafana/`
-- `http://localhost/prometheus/`
+- `http://localhost/` — portal UI
+- `http://localhost/health` — health check (includes DB connectivity)
+- `http://localhost/api/portfolio/projects` — API
+- `http://localhost/grafana/` — Grafana dashboards
+- `http://localhost/prometheus/` — Prometheus targets
 
-Dev uses a Docker Nginx container (port 80) that proxies to app containers via Docker DNS.
+Dev uses `.env.dev` for all configuration. No secrets setup required for local development.
 
-## Tests
+### 2. Run tests
 
 ```bash
 cd apps/devops-platform
@@ -174,6 +177,29 @@ DATABASE_URL=sqlite:// python -m pytest backend/tests/ -v
 ```
 
 Tests use an in-memory SQLite database — no Postgres required. CI runs them automatically on every push.
+
+### 3. Set up secrets for prod
+
+Before deploying to production, configure these GitHub repository secrets:
+
+| Secret | How to get it |
+|---|---|
+| `BECOME_PASSWORD` | sudo password for the deploy user on the VPS |
+| `DB_PASSWORD` | Generate a strong random password for PostgreSQL |
+| `SECRET_KEY` | Generate a random string (e.g. `openssl rand -hex 32`) |
+| `CF_API_TOKEN` | Create a Cloudflare API token with DNS edit permissions for your zone |
+| `SSH_PRIVATE_KEY` | SSH private key that can connect to the VPS |
+| `SSH_HOST` | VPS IP address (e.g. `204.168.184.213`) |
+| `SSH_USER` | SSH user on the VPS (e.g. `make`) |
+
+### 4. Bootstrap + Deploy
+
+```bash
+# 1. One-time: Go to Actions → Bootstrap Infrastructure → Run workflow
+# 2. Deploy:   Go to Actions → Deploy → Run workflow (select prod, provide SHA tag)
+```
+
+See [Infrastructure: Bootstrap vs Deploy](#infrastructure-bootstrap-vs-deploy) for manual commands.
 
 ## Incident Assistant (Optional Ollama)
 
@@ -207,6 +233,51 @@ Production access:
 - `https://kydyrov.dev/prometheus/targets`
 
 Both are routed through host Nginx on 443; production does not expose 3000/9090 publicly.
+
+### Healthcheck Contract
+
+The `/health` and `/api/health` endpoints return JSON with the overall status and per-component checks:
+
+```json
+{
+  "status": "ok",
+  "database": "ok"
+}
+```
+
+- `status` — `"ok"` when all checks pass, `"degraded"` if any component is unhealthy.
+- `database` — `"ok"` if the DB responds to `SELECT 1`, `"error"` otherwise.
+
+Docker Compose healthchecks for `backend` and `nginx` use this endpoint. The Ansible deploy playbook polls `/health` after starting the stack and expects `"status": "ok"`.
+
+**Extending the healthcheck:** To add a new component check, add a try/except block in the `health()` function in `backend/main.py`, return the component status as a new key, and set `overall` to `"degraded"` if it fails.
+
+### Monitoring Setup
+
+**Prometheus scrape targets** are defined in `infra/monitoring/prometheus.yml`:
+
+| Job | Target | Metrics path |
+|---|---|---|
+| `backend` | `backend:8000` | `/metrics` |
+| `monitor-worker` | `monitor-worker:9000` | `/metrics` |
+| `node-exporter` | `node-exporter:9100` | `/metrics` |
+
+To add a new scrape target:
+1. Add a new job entry to `infra/monitoring/prometheus.yml`
+2. The container name must be DNS-resolvable within the Docker Compose network
+3. For prod, ensure the service is in the `app_network` in `docker-compose.prod.yaml.j2`
+
+**Grafana dashboards** are provisioned automatically:
+- Dashboard JSON: `infra/monitoring/grafana/dashboards/platform-overview.json`
+- Provisioning config: `infra/monitoring/grafana/provisioning/dashboards/default.yml`
+- Datasource config: `infra/monitoring/grafana/provisioning/datasources/prometheus.yml`
+
+To add a new dashboard:
+1. Create the dashboard in Grafana UI, then export as JSON
+2. Save the JSON to `infra/monitoring/grafana/dashboards/`
+3. It will be auto-provisioned on next deploy (the provisioning config scans the folder)
+
+**Node Exporter** exposes host-level metrics (CPU, memory, disk, network) inside both dev and prod compose stacks. It mounts the host root filesystem read-only at `/host` and runs in the host PID namespace for accurate metrics.
 
 ## Infrastructure: Bootstrap vs Deploy
 
@@ -328,6 +399,117 @@ Required GitHub secrets:
 - values in `.env.dev` are development-only defaults and must not be reused for production secrets
 - production `db_password` and `secret_key` have no fallback defaults; they must be provided via GitHub Secrets or environment variables
 - UFW firewall on prod restricts inbound to ports 22, 80, 443 only (configured by `bootstrap.yml`)
+
+## How to Add a New Service
+
+Adding a new service to the platform involves these steps:
+
+### 1. Create the service code
+
+Place the service under `apps/devops-platform/` (or a new `apps/<service-name>/` directory for a standalone app). Include a `Dockerfile` and a health endpoint.
+
+### 2. Add to Docker Compose
+
+**Dev** (`apps/devops-platform/docker-compose.dev.yaml`):
+```yaml
+  my-service:
+    build:
+      context: .
+      dockerfile: my-service/Dockerfile
+    container_name: my_service
+    restart: unless-stopped
+    expose:
+      - "8001"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+```
+
+**Prod** (`infra/ansible/templates/docker-compose.prod.yaml.j2`):
+```yaml
+  my-service:
+    image: ghcr.io/${GHCR_OWNER}/devops-platform-my-service:${IMAGE_TAG}
+    container_name: my_service_prod
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8001:8001"
+    networks:
+      - app_network
+```
+
+### 3. Add Nginx routing
+
+**Dev** (`apps/devops-platform/nginx/dev.conf`): Add a `location` block with Docker DNS resolution.
+
+**Prod** (`infra/ansible/templates/prod.conf.j2`): Add an `upstream` block and a `location` block:
+```nginx
+upstream app_my_service {
+    server 127.0.0.1:8001;
+}
+
+# Inside the server block:
+location /my-service/ {
+    proxy_pass http://app_my_service;
+    ...
+}
+```
+
+### 4. Add Prometheus monitoring
+
+Add a scrape target to `infra/monitoring/prometheus.yml` if the service exposes metrics.
+
+### 5. Add CI/CD
+
+- Add the Dockerfile build + push step to `publish-images.yml`
+- Add the image manifest check to the playbook's GHCR verification loop
+- Ensure the service's Docker Compose healthcheck is compatible with the image
+
+### 6. Register in the platform
+
+Create the service via the API (`POST /api/services`) or the portal UI so the monitor-worker can probe it.
+
+## Troubleshooting
+
+### Common issues
+
+**Deploy fails with "SSL certificates not found"**
+Run the Bootstrap Infrastructure workflow first: Actions → Bootstrap Infrastructure → Run workflow. The deploy playbook does not issue certificates — it only checks they exist.
+
+**Deploy fails with "Production deploys must use an immutable SHA tag"**
+Provide the 12-char SHA tag from a successful `Publish Images` run. Do not use `main` as the image tag.
+
+**Health check fails during deploy**
+The playbook polls `/health` up to 15 times (4s apart). If backend startup takes longer:
+- Check container logs: `docker compose -f docker-compose.prod.yaml logs backend`
+- Verify DB is healthy: `docker inspect --format='{{.State.Health.Status}}' devops_db_prod`
+- Ensure `DB_PASSWORD` and `SECRET_KEY` secrets are correctly set
+
+**Nginx config test fails (`nginx -t`)**
+The rendered config at `/etc/nginx/conf.d/kydyrov.dev.conf` has a syntax error. Review the template at `infra/ansible/templates/prod.conf.j2`. The playbook runs `nginx -t` before reload to prevent broken configs.
+
+**Grafana shows "No data"**
+- Check Prometheus targets: `http://localhost/prometheus/targets` (dev) or `https://kydyrov.dev/prometheus/targets` (prod)
+- Ensure the backend container is healthy and exposing `/metrics` on port 8000
+- Verify the Grafana datasource points to `http://prometheus:9090` (inside Docker network)
+
+**Monitor-worker not recording sweeps**
+- Verify the container is running: `docker ps | grep monitor_worker`
+- Check logs: `docker logs monitor_worker` (dev) or `docker logs monitor_worker_prod` (prod)
+- The worker requires the Docker socket mount (`/var/run/docker.sock`) to probe containers
+
+**CI smoke tests fail with timeout**
+The smoke tests wait up to 120 seconds. If containers start slowly on the CI runner, check that the Docker Compose build completes and all healthchecks pass.
+
+**DB migration fails**
+- Dev: migration runs inside the backend container on startup (`alembic upgrade head`)
+- Prod: migration runs as a one-shot `docker compose run --rm backend alembic ...` step before the stack starts
+- If it fails, check the Alembic migration files in `backend/alembic/versions/`
 
 ## Next Improvements
 
