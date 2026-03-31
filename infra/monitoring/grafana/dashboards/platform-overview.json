@@ -123,7 +123,7 @@
       "targets": [
         {
           "datasource": "Prometheus",
-          "expr": "sum by (endpoint) (rate(http_requests_total[5m]))",
+          "expr": "sum by (endpoint) (rate(http_requests_total{endpoint!~\"/api/\\\\.env|/api/.*\\\\.php\"}[5m]))",
           "legendFormat": "{{ endpoint }}"
         }
       ]
