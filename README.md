@@ -131,6 +131,15 @@ Then open:
 - `http://localhost/health`
 - `http://localhost/api/portfolio/projects`
 
+## Tests
+
+```bash
+cd app
+DATABASE_URL=sqlite:// python -m pytest backend/tests/ -v
+```
+
+Tests use an in-memory SQLite database — no Postgres required. CI runs them automatically on every push.
+
 ## VM Deploy
 
 Manual deploy:
