@@ -52,7 +52,7 @@
       "targets": [
         {
           "datasource": "Prometheus",
-          "expr": "sum(rate(http_requests_total{status_code=~\"5..\"}[5m]))",
+          "expr": "sum(rate(http_requests_total{status_code=~\"5..\"}[5m])) or vector(0)",
           "legendFormat": "5xx/s"
         }
       ]
@@ -108,7 +108,7 @@
       "targets": [
         {
           "datasource": "Prometheus",
-          "expr": "sum(increase(incidents_created_total[1h]))",
+          "expr": "sum(increase(incidents_created_total[1h])) or vector(0)",
           "legendFormat": "incidents"
         }
       ]
@@ -145,7 +145,7 @@
       "targets": [
         {
           "datasource": "Prometheus",
-          "expr": "rate(service_probe_success_total[5m]) / (rate(service_probe_success_total[5m]) + rate(service_probe_failure_total[5m]) + 0.0001)",
+          "expr": "sum by (service_name) (rate(service_probe_success_total[5m])) / (sum by (service_name) (rate(service_probe_success_total[5m])) + (sum by (service_name) (rate(service_probe_failure_total[5m])) or (0 * sum by (service_name) (rate(service_probe_success_total[5m])))) + 0.0001)",
           "legendFormat": "{{ service_name }}"
         }
       ]
