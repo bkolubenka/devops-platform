@@ -536,18 +536,7 @@
   </head>
   <body>
     <nav>
-      <div class="nav-shell">
-        <h1 class="brand">DevOps Platform</h1>
-        <div class="nav-links">
-          <a href="/#home" class="nav-link active" data-section="home">Overview</a>
-          <a href="/#portfolio" class="nav-link" data-section="portfolio">Projects</a>
-          <a href="/#services" class="nav-link" data-section="services">Services</a>
-          <a href="/#incidents" class="nav-link" data-section="incidents">Incidents</a>
-          <a href="/#ai" class="nav-link" data-section="ai">Incident Assistant</a>
-          <a href="/#observability" class="nav-link" data-section="observability">Observability</a>
-          <a href="/resume/" class="nav-link">Resume</a>
-        </div>
-      </div>
+      <div id="shared-nav-root"></div>
     </nav>
 
     <div class="page-shell">
@@ -830,7 +819,7 @@
                 </div>
               </div>
               <p class="metric-meta" style="margin-top:16px;">
-                Prometheus: port 9090 &middot; Grafana: port 3000 &middot; Scrape interval: 30s &middot; Retention: 7 days
+                Routed via Nginx: /prometheus/ and /grafana/ &middot; Scrape interval: 30s &middot; Retention: 7 days
               </p>
             </section>
           </div>
@@ -846,7 +835,10 @@
       </main>
     </div>
 
+    <script src="/shared-nav.js"></script>
     <script>
+      renderSharedNav("portal");
+
       const state = {
         editingProjectId: null,
         editingServiceId: null,
@@ -1372,9 +1364,8 @@
         const grafanaLink = document.getElementById("grafana-link");
         const prometheusLink = document.getElementById("prometheus-link");
 
-        const host = window.location.hostname;
-        grafanaLink.href = `http://${host}:3000`;
-        prometheusLink.href = `http://${host}:9090`;
+        grafanaLink.href = "/grafana/";
+        prometheusLink.href = "/prometheus/";
 
         try {
           const [overview, incidents] = await Promise.all([
