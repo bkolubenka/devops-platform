@@ -18,6 +18,7 @@ from .main import (
     DBIncident,
     DBServiceActionJob,
     DBService,
+    ENV_SHORT,
     SERVICE_ACTION_POLICIES,
     build_service_overview,
     compute_overview,
@@ -208,7 +209,14 @@ class MonitorHealthHandler(BaseHTTPRequestHandler):
 
 def build_service_states(db_session) -> dict[str, dict[str, Any]]:
     states: dict[str, dict[str, Any]] = {}
-    for service in db_session.query(DBService).filter(DBService.is_active.is_(True)).all():
+    for service in (
+        db_session.query(DBService)
+        .filter(
+            DBService.is_active.is_(True),
+            DBService.environment.in_([ENV_SHORT, "all"]),
+        )
+        .all()
+    ):
         start = time.perf_counter()
         overview = build_service_overview(service)
         duration = time.perf_counter() - start
@@ -353,7 +361,9 @@ def log_change_events(db_session, previous_states: dict[str, dict[str, Any]], cu
             affected_service_id=monitor_service_id,
             severity="low",
             summary="All monitored platform services were healthy in the latest sweep.",
-            symptoms="backend, frontend, nginx, and monitor-worker checks passed.",
+            symptoms=", ".join(
+                state.get("name", "unknown") for state in current_states.values()
+            ) + " checks passed.",
             recent_changes="No state changes detected during the current monitor cycle.",
             status="resolved",
             source=MONITOR_SOURCE,
