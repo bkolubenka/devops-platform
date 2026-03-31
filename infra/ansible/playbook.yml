@@ -252,6 +252,13 @@
         mode: "0644"
       when: deploy_env == 'prod'
 
+    - name: Render shared SSL params snippet
+      template:
+        src: ssl-params.conf.j2
+        dest: /etc/nginx/snippets/ssl-params.conf
+        mode: "0644"
+      when: deploy_env == 'prod'
+
     - name: Render prod runtime env file
       template:
         src: prod.env.j2
