@@ -22,8 +22,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install ansible
 
+      - name: Install backend dependencies
+        run: pip install -r app/backend/requirements.txt
+
       - name: Validate backend syntax
         run: python -m py_compile app/backend/main.py app/backend/database.py app/backend/models.py app/backend/monitor_worker.py
+
+      - name: Run backend unit tests
+        working-directory: app
+        env:
+          DATABASE_URL: "sqlite://"
+        run: python -m pytest backend/tests/ -v --tb=short
 
       - name: Validate Ansible playbook syntax
         run: |
