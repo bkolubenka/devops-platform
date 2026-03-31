@@ -1,11 +1,18 @@
 import json
 import os
+import time
 from datetime import datetime
 from typing import Any, Optional
 
 import httpx
-from fastapi import Depends, FastAPI, HTTPException, Response, status
+from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    Counter,
+    Histogram,
+    generate_latest,
+)
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -39,6 +46,36 @@ OLLAMA_ENABLED_ENV = "INCIDENT_ASSISTANT_USE_OLLAMA"
 OLLAMA_BASE_URL_ENV = "OLLAMA_BASE_URL"
 OLLAMA_MODEL_ENV = "OLLAMA_MODEL"
 OLLAMA_TIMEOUT_ENV = "OLLAMA_TIMEOUT_SECONDS"
+
+# ---------------------------------------------------------------------------
+# Prometheus metrics
+# ---------------------------------------------------------------------------
+http_requests_total = Counter(
+    "http_requests_total",
+    "Total HTTP requests by method, endpoint, and status code",
+    ["method", "endpoint", "status_code"],
+)
+http_request_duration_seconds = Histogram(
+    "http_request_duration_seconds",
+    "HTTP request duration in seconds by endpoint",
+    ["endpoint"],
+    buckets=[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5],
+)
+incidents_created_total = Counter(
+    "incidents_created_total",
+    "Total incidents created via the API",
+    ["severity", "source"],
+)
+service_action_jobs_total = Counter(
+    "service_action_jobs_total",
+    "Total service action jobs queued",
+    ["action", "service_name"],
+)
+incident_assistant_requests_total = Counter(
+    "incident_assistant_requests_total",
+    "Total incident assistant analysis requests",
+    ["mode"],  # rule_based | ollama | fallback
+)
 
 INCIDENT_RUNBOOKS: dict[str, dict[str, Any]] = {
     "service_unavailable": {
@@ -233,6 +270,24 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def prometheus_http_middleware(request: Request, call_next: Any) -> Any:
+    if request.url.path == "/metrics":
+        return await call_next(request)
+    start = time.perf_counter()
+    response = await call_next(request)
+    duration = time.perf_counter() - start
+    route = request.scope.get("route")
+    endpoint = route.path if route else request.url.path
+    http_requests_total.labels(
+        method=request.method,
+        endpoint=endpoint,
+        status_code=str(response.status_code),
+    ).inc()
+    http_request_duration_seconds.labels(endpoint=endpoint).observe(duration)
+    return response
 
 
 class ProjectBase(BaseModel):
@@ -1019,6 +1074,12 @@ def build_incident_analysis(
         )
         if llm_guidance.get("confidence"):
             confidence = llm_guidance["confidence"]
+        _assistant_mode = "ollama"
+    elif env_flag(OLLAMA_ENABLED_ENV, default=False):
+        _assistant_mode = "fallback"
+    else:
+        _assistant_mode = "rule_based"
+    incident_assistant_requests_total.labels(mode=_assistant_mode).inc()
 
     return IncidentAnalysisResponse(
         incident_class=incident_class,
@@ -1103,6 +1164,8 @@ def queue_service_action(db: Session, service: DBService, action: str) -> Servic
         },
     )
 
+    service_action_jobs_total.labels(action=action, service_name=service.name).inc()
+
     return ServiceActionResponse(
         job_id=job.id,
         service_id=service.id,
@@ -1117,6 +1180,11 @@ def queue_service_action(db: Session, service: DBService, action: str) -> Servic
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/metrics", include_in_schema=False)
+def metrics() -> Response:
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 @app.get("/")
@@ -1363,6 +1431,10 @@ def create_incident(
         event_type=payload.event_type or "incident",
         overview_snapshot=payload.overview_snapshot,
     )
+    incidents_created_total.labels(
+        severity=payload.severity,
+        source=payload.source or "manual",
+    ).inc()
     return serialize_incident(incident)
 
 

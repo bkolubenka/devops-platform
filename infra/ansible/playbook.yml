@@ -193,6 +193,20 @@
         proto: tcp
       when: deploy_env == 'prod'
 
+    - name: Allow Grafana through UFW
+      ufw:
+        rule: allow
+        port: '3000'
+        proto: tcp
+      when: deploy_env == 'prod'
+
+    - name: Allow Prometheus through UFW
+      ufw:
+        rule: allow
+        port: '9090'
+        proto: tcp
+      when: deploy_env == 'prod'
+
     - name: Enable UFW
       ufw:
         state: enabled
@@ -427,6 +441,45 @@
         src: prod.env.j2
         dest: "{{ runtime_env_file }}"
         mode: "0600"
+      when: deploy_env == 'prod'
+
+    - name: Ensure prod monitoring directories exist
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ runtime_root }}/grafana/provisioning/datasources"
+        - "{{ runtime_root }}/grafana/provisioning/dashboards"
+        - "{{ runtime_root }}/grafana/dashboards"
+      when: deploy_env == 'prod'
+
+    - name: Copy Prometheus config to runtime
+      copy:
+        src: "{{ playbook_dir }}/../../infra/monitoring/prometheus.yml"
+        dest: "{{ runtime_root }}/prometheus.yml"
+        mode: "0644"
+      when: deploy_env == 'prod'
+
+    - name: Copy Grafana provisioning datasources to runtime
+      copy:
+        src: "{{ playbook_dir }}/../../infra/monitoring/grafana/provisioning/datasources/prometheus.yml"
+        dest: "{{ runtime_root }}/grafana/provisioning/datasources/prometheus.yml"
+        mode: "0644"
+      when: deploy_env == 'prod'
+
+    - name: Copy Grafana provisioning dashboards config to runtime
+      copy:
+        src: "{{ playbook_dir }}/../../infra/monitoring/grafana/provisioning/dashboards/default.yml"
+        dest: "{{ runtime_root }}/grafana/provisioning/dashboards/default.yml"
+        mode: "0644"
+      when: deploy_env == 'prod'
+
+    - name: Copy Grafana dashboard JSON to runtime
+      copy:
+        src: "{{ playbook_dir }}/../../infra/monitoring/grafana/dashboards/platform-overview.json"
+        dest: "{{ runtime_root }}/grafana/dashboards/platform-overview.json"
+        mode: "0644"
       when: deploy_env == 'prod'
 
     - name: Run dev docker compose build and deploy

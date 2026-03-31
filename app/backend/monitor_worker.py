@@ -4,11 +4,13 @@ import json
 import os
 import signal
 import threading
+import time
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 import docker
+from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 from sqlalchemy import desc
 
 from .database import SessionLocal
@@ -27,6 +29,31 @@ MONITOR_HEALTH_HOST = os.getenv("MONITOR_HEALTH_HOST", "0.0.0.0")
 MONITOR_HEALTH_PORT = int(os.getenv("MONITOR_HEALTH_PORT", "9000"))
 MONITOR_PROBES_ENABLED = os.getenv("MONITOR_PROBES_ENABLED", "true").lower() == "true"
 MONITOR_SOURCE = "monitor-worker"
+
+# ---------------------------------------------------------------------------
+# Prometheus probe metrics
+# ---------------------------------------------------------------------------
+service_probe_success_total = Counter(
+    "service_probe_success_total",
+    "Total successful service health probes by worker",
+    ["service_name", "environment"],
+)
+service_probe_failure_total = Counter(
+    "service_probe_failure_total",
+    "Total failed service health probes by worker",
+    ["service_name", "environment"],
+)
+service_probe_latency_seconds = Histogram(
+    "service_probe_latency_seconds",
+    "Service health probe round-trip latency in seconds",
+    ["service_name"],
+    buckets=[0.005, 0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0],
+)
+service_state_changes_total = Counter(
+    "service_state_changes_total",
+    "Total detected service state changes (healthy/unhealthy transitions)",
+    ["service_name", "to_state"],
+)
 
 
 def process_pending_action_jobs(db_session) -> None:
@@ -157,17 +184,23 @@ def process_pending_action_jobs(db_session) -> None:
 
 class MonitorHealthHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
-        if self.path not in {"/", "/health"}:
+        if self.path in {"/", "/health"}:
+            body = json.dumps({"status": "ok", "service": MONITOR_SOURCE}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        elif self.path == "/metrics":
+            body = generate_latest()
+            self.send_response(200)
+            self.send_header("Content-Type", CONTENT_TYPE_LATEST)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        else:
             self.send_response(404)
             self.end_headers()
-            return
-
-        body = json.dumps({"status": "ok", "service": MONITOR_SOURCE}).encode("utf-8")
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
 
     def log_message(self, format: str, *args: object) -> None:  # noqa: A002
         return
@@ -176,7 +209,18 @@ class MonitorHealthHandler(BaseHTTPRequestHandler):
 def build_service_states(db_session) -> dict[str, dict[str, Any]]:
     states: dict[str, dict[str, Any]] = {}
     for service in db_session.query(DBService).filter(DBService.is_active.is_(True)).all():
+        start = time.perf_counter()
         overview = build_service_overview(service)
+        duration = time.perf_counter() - start
+        service_probe_latency_seconds.labels(service_name=service.name).observe(duration)
+        if overview.healthy:
+            service_probe_success_total.labels(
+                service_name=service.name, environment=service.environment
+            ).inc()
+        else:
+            service_probe_failure_total.labels(
+                service_name=service.name, environment=service.environment
+            ).inc()
         states[str(service.id)] = {
             "id": service.id,
             "name": service.name,
@@ -268,6 +312,11 @@ def log_change_events(db_session, previous_states: dict[str, dict[str, Any]], cu
         title, summary = classify_change(previous_state, current_state)
         severity = "high" if current_state.get("healthy") is False else "medium"
         status = "open" if current_state.get("healthy") is False else "resolved"
+        to_state = "unhealthy" if current_state.get("healthy") is False else "healthy"
+        service_state_changes_total.labels(
+            service_name=current_state.get("name", "unknown"),
+            to_state=to_state,
+        ).inc()
         recent_changes = (
             f"Previous state: healthy={previous_state.get('healthy', 'unknown')}, "
             f"status={previous_state.get('status', 'unknown')}; "
