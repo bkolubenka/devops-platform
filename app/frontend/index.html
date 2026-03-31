@@ -812,7 +812,7 @@
           <iframe
             id="grafana-iframe"
             class="grafana-embed"
-            src=""
+            src="/grafana/d/devops-platform-overview/devops-platform-overview?orgId=1&amp;kiosk&amp;refresh=30s"
             frameborder="0"
             loading="lazy"
             title="DevOps Platform Overview Dashboard"
@@ -831,13 +831,13 @@
               <div class="detail-list">
                 <div class="detail-item">
                   <span>Grafana</span>
-                  <a id="grafana-link" href="#" target="_blank" rel="noreferrer" class="contact-item" style="border:none;padding:0;">
+                  <a id="grafana-link" href="/grafana/d/devops-platform-overview/devops-platform-overview" target="_blank" rel="noreferrer" class="contact-item" style="border:none;padding:0;">
                     Open full dashboard &rarr;
                   </a>
                 </div>
                 <div class="detail-item">
                   <span>Prometheus</span>
-                  <a id="prometheus-link" href="#" target="_blank" rel="noreferrer" class="contact-item" style="border:none;padding:0;">
+                  <a id="prometheus-link" href="/prometheus/" target="_blank" rel="noreferrer" class="contact-item" style="border:none;padding:0;">
                     Open Prometheus &rarr;
                   </a>
                 </div>
@@ -1385,18 +1385,6 @@
       async function loadObservability() {
         const metricsEl = document.getElementById("observability-metrics");
         const incidentsEl = document.getElementById("observability-incidents");
-        const grafanaLink = document.getElementById("grafana-link");
-        const prometheusLink = document.getElementById("prometheus-link");
-
-        const dashboardPath = "/grafana/d/devops-platform-overview/devops-platform-overview";
-        grafanaLink.href = dashboardPath;
-        prometheusLink.href = "/prometheus/";
-
-        const iframe = document.getElementById("grafana-iframe");
-        if (!iframe.src || iframe.src === window.location.href) {
-          iframe.src = dashboardPath + "?orgId=1&kiosk&refresh=30s";
-        }
-
         try {
           const [overview, incidents] = await Promise.all([
             apiRequest("/api/overview"),
