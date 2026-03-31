@@ -12,9 +12,9 @@ on:
           - dev
           - prod
       image_tag:
-        description: "Image tag to deploy in prod"
-        required: true
-        default: main
+        description: "Image tag to deploy in prod (12-char SHA from Publish Images)"
+        required: false
+        default: ""
         type: string
       rollback_to_previous:
         description: "Rollback prod to the previous recorded release"
@@ -58,8 +58,8 @@ jobs:
         if: ${{ inputs.deploy_env == 'prod' }}
         run: |
           if [ "${{ inputs.rollback_to_previous }}" = "false" ]; then
-            if [ "${{ inputs.image_tag }}" = "main" ]; then
-              echo "Production deploys must use an immutable SHA tag, not 'main'."
+            if [ -z "${{ inputs.image_tag }}" ] || [ "${{ inputs.image_tag }}" = "main" ]; then
+              echo "Production deploys must use an immutable SHA tag. Copy the 12-char SHA from Publish Images output."
               exit 1
             fi
             if ! echo "${{ inputs.image_tag }}" | grep -Eq '^[0-9a-f]{7,40}$'; then
