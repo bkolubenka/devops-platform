@@ -532,6 +532,21 @@
         margin-top: 12px;
         font-size: 0.95rem;
       }
+
+      .grafana-embed {
+        width: 100%;
+        height: 480px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        margin-top: 24px;
+        background: #181b1f;
+      }
+
+      @media (min-width: 980px) {
+        .grafana-embed {
+          height: 620px;
+        }
+      }
     </style>
   </head>
   <body>
@@ -794,6 +809,15 @@
 
           <section class="summary-grid" id="observability-metrics" style="margin-top: 28px;"></section>
 
+          <iframe
+            id="grafana-iframe"
+            class="grafana-embed"
+            src=""
+            frameborder="0"
+            loading="lazy"
+            title="DevOps Platform Overview Dashboard"
+          ></iframe>
+
           <div class="section-layout" style="margin-top: 24px;">
             <section class="panel">
               <p class="eyebrow">Recent Incidents</p>
@@ -808,7 +832,7 @@
                 <div class="detail-item">
                   <span>Grafana</span>
                   <a id="grafana-link" href="#" target="_blank" rel="noreferrer" class="contact-item" style="border:none;padding:0;">
-                    Open Grafana &rarr;
+                    Open full dashboard &rarr;
                   </a>
                 </div>
                 <div class="detail-item">
@@ -1364,8 +1388,14 @@
         const grafanaLink = document.getElementById("grafana-link");
         const prometheusLink = document.getElementById("prometheus-link");
 
-        grafanaLink.href = "/grafana/";
+        const dashboardPath = "/grafana/d/devops-platform-overview/devops-platform-overview";
+        grafanaLink.href = dashboardPath;
         prometheusLink.href = "/prometheus/";
+
+        const iframe = document.getElementById("grafana-iframe");
+        if (!iframe.src || iframe.src === window.location.href) {
+          iframe.src = dashboardPath + "?orgId=1&kiosk&refresh=30s";
+        }
 
         try {
           const [overview, incidents] = await Promise.all([
