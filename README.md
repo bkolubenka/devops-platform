@@ -16,12 +16,13 @@ Containerized fullstack pet project deployed to an Ubuntu VM with Ansible, Docke
 - monitor-worker demo service that records platform health summaries and state transitions
 - worker-mediated service actions so the API queues intent and a separate runner executes it
 - GHCR-backed production images for app services
-- Prometheus + Grafana observability stack with provisioned dashboards and embedded live metrics
+- Prometheus + Grafana + Node Exporter observability stack with provisioned dashboards and embedded live metrics
 - build metadata footer with app version, image tag, build id, and pinned component versions
-- Nginx reverse proxy on the VM
+- host-managed Nginx reverse proxy on prod (Docker Nginx on dev)
+- two-phase infrastructure: `bootstrap.yml` for one-time server setup + `playbook.yml` for app deploys
 - Ansible-based deployment
-- GitHub Actions CI
-- self-hosted GitHub Actions deploy runner on the VM
+- GitHub Actions CI with bootstrap, publish, deploy, and auto-deploy workflows
+- self-hosted GitHub Actions deploy runners on the VM/VPS
 
 ## Current Architecture
 
@@ -32,18 +33,22 @@ Self-hosted runner (vm-1 or vps-1)
     ↓
 Ansible (local or SSH to VPS)
     ↓
-Docker Compose
+Docker Compose (app containers)
     ↓
-Nginx (HTTPS on prod)
-  ├─ /        -> frontend
-  ├─ /api/*   -> FastAPI backend
+Host Nginx (prod) / Docker Nginx (dev)
+  ├─ /        -> frontend (127.0.0.1:8080)
+  ├─ /api/*   -> FastAPI backend (127.0.0.1:8000)
   ├─ /health  -> backend health check
-  ├─ /grafana/ -> Grafana UI (proxied)
-  └─ /prometheus/ -> Prometheus UI (proxied)
+  ├─ /grafana/ -> Grafana UI (127.0.0.1:3000)
+  └─ /prometheus/ -> Prometheus UI (127.0.0.1:9090)
 ```
+
+Production Nginx runs on the host (installed by `bootstrap.yml`), not inside Docker.
+App containers bind to `127.0.0.1` and are only reachable through the host Nginx reverse proxy.
 
 - `monitor-worker` is a separate demo worker container that records operational log sweeps into the incident log.
 - `action-runner` is a hidden executor container that processes queued service-action jobs so the API never talks to Docker directly.
+- `node-exporter` exposes host-level metrics (CPU, memory, disk, network) for Prometheus.
 
 ## Tech Stack
 
@@ -51,15 +56,16 @@ Nginx (HTTPS on prod)
 - FastAPI
 - SQLAlchemy
 - PostgreSQL
-- Nginx
+- Nginx (host-managed on prod, Docker container on dev)
 - Docker / Docker Compose
 - Ansible
 - GitHub Actions
+- Prometheus / Grafana / Node Exporter
 
 ## Project Structure
 
 ```text
-app/
+apps/devops-platform/
   backend/
     main.py
     monitor_worker.py
@@ -78,22 +84,40 @@ app/
       index.html
     Dockerfile
   nginx/
-    dev.conf
-    prod.conf
+    dev.conf          ← used by Docker Nginx in dev
+    prod.conf         ← reference only; prod uses host Nginx via template
+  docker-compose.dev.yaml
+  .env.dev
 
 infra/
   ansible/
     ansible.cfg
     inventory.ini
-    playbook.yml
+    bootstrap.yml     ← one-time server setup (Docker, Nginx, SSL, UFW)
+    playbook.yml      ← app deployment (dev and prod)
     group_vars/
       all.yml
+    templates/
+      docker-compose.prod.yaml.j2
+      prod.conf.j2    ← host Nginx config rendered to /etc/nginx/conf.d/
+      ssl-params.conf.j2
+      prod.env.j2
+      release.env.j2
+  monitoring/
+    prometheus.yml
+    grafana/
+      dashboards/
+        platform-overview.json
+      provisioning/
+        dashboards/default.yml
+        datasources/prometheus.yml
 
 .github/workflows/
   ci.yml
   deploy.yml
   auto-deploy-prod.yml
   publish-images.yml
+  bootstrap.yml       ← manual workflow for server bootstrapping
 ```
 
 ## Application Routes
@@ -128,6 +152,7 @@ infra/
 ## Local Run
 
 ```bash
+cd apps/devops-platform
 docker compose --env-file .env.dev -f docker-compose.dev.yaml up --build
 ```
 
@@ -139,10 +164,12 @@ Then open:
 - `http://localhost/grafana/`
 - `http://localhost/prometheus/`
 
+Dev uses a Docker Nginx container (port 80) that proxies to app containers via Docker DNS.
+
 ## Tests
 
 ```bash
-cd app
+cd apps/devops-platform
 DATABASE_URL=sqlite:// python -m pytest backend/tests/ -v
 ```
 
@@ -166,7 +193,8 @@ If Ollama is unavailable or returns invalid output, the API automatically falls 
 
 - Backend exposes Prometheus metrics at `/metrics`.
 - `monitor-worker` exposes probe metrics at `:9000/metrics`.
-- Prometheus scrapes backend and monitor-worker every 30 seconds.
+- `node-exporter` exposes host-level metrics (CPU, memory, disk, network) at `:9100/metrics`.
+- Prometheus scrapes backend, monitor-worker, and node-exporter every 30 seconds.
 - Grafana dashboards and datasource are provisioned from `infra/monitoring/grafana/`.
 - Grafana allows anonymous read-only access (Viewer role); admin account retains full control.
 - The Observability tab on the portal embeds the Grafana dashboard inline via iframe (kiosk mode).
@@ -178,28 +206,45 @@ Production access:
 - `https://kydyrov.dev/grafana/d/devops-platform-overview/devops-platform-overview` (dashboard)
 - `https://kydyrov.dev/prometheus/targets`
 
-Both are routed through Nginx on 443; production does not require exposing 3000/9090 publicly.
+Both are routed through host Nginx on 443; production does not expose 3000/9090 publicly.
 
-## VM Deploy
+## Infrastructure: Bootstrap vs Deploy
 
-Manual deploy:
+The infrastructure is split into two Ansible playbooks:
+
+### bootstrap.yml — One-time server setup
+
+Run once on a fresh VPS (or when infrastructure components change):
 
 ```bash
-DEPLOY_ENV=dev DEPLOY_REPO_REF=main ansible-playbook -i infra/ansible/inventory.ini infra/ansible/playbook.yml --ask-become-pass
+# Via GitHub Actions: Actions → Bootstrap Infrastructure → Run workflow
+# Or manually:
+DEPLOY_CF_API_TOKEN=<token> ansible-playbook -i infra/ansible/inventory.ini infra/ansible/bootstrap.yml --limit vps --ask-become-pass
 ```
 
-Canonical commands (current inventory groups):
+Bootstrap handles:
+- Docker CE + Docker Compose plugin installation
+- Host Nginx installation and enablement
+- UFW firewall (ports 22, 80, 443)
+- SSL certificate issuance via certbot Cloudflare DNS-01 (or standalone HTTP-01 fallback)
+- Auto-renewal cron (daily 12:00 UTC, reloads nginx on renewal)
+
+### playbook.yml — App deployment
+
+Run for every deploy (dev or prod):
 
 ```bash
-# Dev deploy to VPS host group
-DEPLOY_ENV=dev ansible-playbook -i infra/ansible/inventory.ini infra/ansible/playbook.yml --limit vps --ask-become-pass -e "repo_url=https://github.com/bkolubenka/devops-platform.git repo_version=main"
-
-# Dev deploy to VM host group
+# Dev deploy
 DEPLOY_ENV=dev ansible-playbook -i infra/ansible/inventory.ini infra/ansible/playbook.yml --limit vm --ask-become-pass
 
-# Prod deploy to VPS host group (use published 12-char SHA image tag)
-DEPLOY_ENV=prod DEPLOY_IMAGE_TAG=<sha12> DEPLOY_DB_PASSWORD=<db_password> DEPLOY_SECRET_KEY=<secret_key> ansible-playbook -i infra/ansible/inventory.ini infra/ansible/playbook.yml --limit vps --ask-become-pass
+# Prod deploy (use published 12-char SHA image tag)
+DEPLOY_ENV=prod DEPLOY_IMAGE_TAG=<sha12> DEPLOY_DB_PASSWORD=<pw> DEPLOY_SECRET_KEY=<key> ansible-playbook -i infra/ansible/inventory.ini infra/ansible/playbook.yml --limit vps --ask-become-pass
 ```
+
+Deploy handles:
+- Dev: clone repo, build containers from source, start Docker Nginx
+- Prod: render compose/env/nginx templates, pull GHCR images, run migrations, start stack, validate host nginx config (`nginx -t`), reload host nginx
+- Prod requires SSL certificates to already exist (fails with guidance to run `bootstrap.yml` if missing)
 
 Notes:
 
@@ -211,24 +256,32 @@ Notes:
 SSL (production):
 
 - Domain `kydyrov.dev` and `www.kydyrov.dev` are live with Let's Encrypt certificates.
-- Certificates are issued automatically during deploy via certbot Cloudflare DNS-01 challenge (requires `CF_API_TOKEN` secret).
-- Certbot renewal cron runs daily at 12:00 UTC, copies renewed certs into the runtime directory, and restarts nginx.
+- Certificates are issued by `bootstrap.yml` via certbot Cloudflare DNS-01 challenge (requires `CF_API_TOKEN` secret).
+- Certbot renewal cron runs daily at 12:00 UTC and reloads host nginx on success.
 - Cloudflare SSL/TLS mode should be set to `Full (strict)` with proxy enabled.
+- The deploy playbook checks that certificates exist but does **not** issue them — run `bootstrap.yml` first.
 
-GitHub Actions deploy:
+GitHub Actions workflows:
+
+| Workflow | Trigger | Runner | Purpose |
+|---|---|---|---|
+| `ci.yml` | push, PR | `ubuntu-latest` | Lint, test, build, smoke test |
+| `publish-images.yml` | push to `main` | `ubuntu-latest` | Build and push GHCR images |
+| `deploy.yml` | manual dispatch | `vm-1` (dev) / `self-hosted` (prod) | Deploy app |
+| `auto-deploy-prod.yml` | after Publish Images | `self-hosted` | Auto-deploy prod on main |
+| `bootstrap.yml` | manual dispatch | `self-hosted` | One-time server bootstrap |
+
+Deploy details:
 
 - runs on self-hosted runners with smart routing:
   - **Dev deploys** → `vm-1` runner (local VirtualBox VM), Ansible runs locally
   - **Prod deploys** → any available self-hosted runner; if runner is `vps-1`, Ansible runs locally; otherwise Ansible connects to the VPS via SSH
-- is triggered manually with `workflow_dispatch` (dev or prod selector)
-- also supports automatic prod deploy after successful `Publish Images` on `main` (any self-hosted runner)
 - auto deploy uses the published commit SHA (short tag) as the production image tag
 - GHCR authentication is performed by Ansible on the target host (not the runner)
 - keeps dev source-based and repo-synced on the VM
 - renders prod runtime files under `/opt/devops-platform`
 - pulls GHCR app images for prod and deploys them without destructive `down/prune` steps
 - records `current_release.env` and `previous_release.env` on the server for rollback metadata
-- SSL certificates are issued via certbot with Cloudflare DNS-01 challenge
 - See [.github/RUNNER_SETUP.md](.github/RUNNER_SETUP.md) for runner registration and labeling instructions
 
 Branch policy:
@@ -239,13 +292,15 @@ Branch policy:
 
 Required GitHub secrets:
 
-- `BECOME_PASSWORD` — Ansible become (sudo) password
-- `DB_PASSWORD` — PostgreSQL password
-- `SECRET_KEY` — FastAPI secret key
-- `CF_API_TOKEN` — Cloudflare API token for DNS-01 SSL issuance
-- `SSH_PRIVATE_KEY` — SSH key for remote Ansible when runner is not `vps-1`
-- `SSH_HOST` — VPS IP address
-- `SSH_USER` — SSH user on the VPS
+| Secret | Used by | Purpose |
+|---|---|---|
+| `BECOME_PASSWORD` | deploy, bootstrap | Ansible become (sudo) password |
+| `DB_PASSWORD` | deploy | PostgreSQL password (prod only) |
+| `SECRET_KEY` | deploy | FastAPI secret key (prod only) |
+| `CF_API_TOKEN` | bootstrap | Cloudflare API token for DNS-01 SSL issuance |
+| `SSH_PRIVATE_KEY` | deploy, bootstrap | SSH key for remote Ansible when runner is not `vps-1` |
+| `SSH_HOST` | deploy, bootstrap | VPS IP address |
+| `SSH_USER` | deploy, bootstrap | SSH user on the VPS |
 
 ## Operational Flow
 
@@ -256,24 +311,28 @@ Required GitHub secrets:
 
 ## Notes
 
-- `docker-compose.dev.yaml` is the active working environment
-- `docker-compose.prod.yaml` is registry-backed for backend, frontend, monitor-worker, and the hidden action-runner
-- frontend navigation is shared from `app/frontend/shared-nav.js` and rendered by both `app/frontend/index.html` and `app/frontend/resume/index.html`
+- `docker-compose.dev.yaml` is the active working environment; dev uses Docker Nginx inside the compose stack
+- `docker-compose.prod.yaml` is rendered from `infra/ansible/templates/docker-compose.prod.yaml.j2`; prod does **not** include an Nginx container — host Nginx handles all traffic
+- `apps/devops-platform/nginx/prod.conf` is a reference file only; the actual prod config is rendered from `infra/ansible/templates/prod.conf.j2` to `/etc/nginx/conf.d/kydyrov.dev.conf`
+- frontend navigation is shared from `apps/devops-platform/frontend/shared-nav.js` and rendered by both `index.html` and `resume/index.html`
 - Postgres data lives in a named volume and is preserved across deploys
 - Schema and release-bound data changes should be done through Alembic migrations
 - dev startup runs `alembic upgrade head` inside the backend container; that is convenient for single-instance local work, while prod uses a separate one-shot migration step
-- Production deploys should use immutable SHA image tags rather than mutable tags like `main`
-- SSL is live on `kydyrov.dev` with Let's Encrypt certificates issued via Cloudflare DNS-01
+- Production deploys must use immutable SHA image tags; the deploy workflow rejects `main` as an image tag
+- SSL is live on `kydyrov.dev` with Let's Encrypt certificates issued via `bootstrap.yml`
+- Production secrets (`DB_PASSWORD`, `SECRET_KEY`) are required and have no defaults — deploy fails if not provided
 
 ## Security Notes
 
 - `monitor-worker` and `action-runner` mount `/var/run/docker.sock`, which gives high-privilege Docker control inside those containers
 - values in `.env.dev` are development-only defaults and must not be reused for production secrets
+- production `db_password` and `secret_key` have no fallback defaults; they must be provided via GitHub Secrets or environment variables
+- UFW firewall on prod restricts inbound to ports 22, 80, 443 only (configured by `bootstrap.yml`)
 
 ## Next Improvements
 
-- move development defaults from `.env.dev` to a non-committed local env workflow
 - replace the demo AI endpoint with a real model-backed service or RAG layer
-- split Nginx config cleanly for dev vs prod
 - add targeted tests for incident autofill and service actions
-- add more Grafana dashboards (per-service detail, database metrics)
+- add more Grafana dashboards (per-service detail, database metrics, node-exporter host panels)
+- add subdomain routing for multi-service support (e.g. `api.kydyrov.dev`)
+- create app template skeleton for onboarding new services

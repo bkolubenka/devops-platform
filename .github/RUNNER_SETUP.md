@@ -9,8 +9,9 @@ This project uses two self-hosted GitHub Actions runners for deployment:
 
 The workflows use runner names as labels to ensure:
 - **Dev deploys** run on `vm-1` (local runner only)
-- **Prod deploys** run on `vps-1` (remote runner only)
-- Auto-deploy pushes to `vps-1` when images are published
+- **Prod deploys** run on any available self-hosted runner; if runner is `vps-1`, Ansible runs locally; otherwise connects via SSH
+- **Auto-deploy** runs on any available self-hosted runner after Publish Images succeeds on main
+- **Bootstrap** runs on any available self-hosted runner (same SSH routing as prod deploy)
 
 This prevents accidental cross-environment deployments and respects network isolation (dev cannot deploy to prod runner due to network constraints).
 
@@ -99,17 +100,35 @@ Visit your GitHub repository's **Settings > Actions > Runners** to confirm both 
 
 After proper registration:
 
-- **Manual `deploy.yml` dispatch**:
-  - When `deploy_env=dev`: uses `vm-1`
-  - When `deploy_env=prod`: uses `vps-1`
-  
-- **Auto `auto-deploy-prod.yml`**: Always uses `vps-1` (triggered after Publish Images succeeds on main)
+| Workflow | Trigger | Runner |
+|---|---|---|
+| `ci.yml` | push, PR | `ubuntu-latest` (GitHub-hosted) |
+| `publish-images.yml` | push to `main` | `ubuntu-latest` (GitHub-hosted) |
+| `deploy.yml` (dev) | manual dispatch | `vm-1` |
+| `deploy.yml` (prod) | manual dispatch | any `self-hosted` |
+| `auto-deploy-prod.yml` | after Publish Images | any `self-hosted, linux` |
+| `bootstrap.yml` | manual dispatch | any `self-hosted, linux` |
+
+For prod/bootstrap: if the runner is `vps-1`, Ansible runs locally; otherwise Ansible connects to the VPS via SSH using `SSH_PRIVATE_KEY`, `SSH_HOST`, and `SSH_USER` secrets.
+
+## Fresh Server Setup
+
+For a new VPS, after registering the runner:
+
+1. **Bootstrap**: Go to Actions → Bootstrap Infrastructure → Run workflow
+   - This installs Docker, host Nginx, UFW, SSL certificates
+2. **Deploy**: Go to Actions → Deploy → Run workflow (select `prod`)
+   - This deploys the application stack
+
+Bootstrap only needs to run once (or when infrastructure components change).
 
 ## Troubleshooting
 
 - **Runner not appearing**: Verify registration token is valid and not expired. Get new token from Settings > Actions > Runners > New self-hosted runner.
 - **Deploy fails with "No runners found for..."**: Check runner names match exactly (`vm-1`, `vps-1`). Verify runner service is running.
 - **Sudo password prompt during deploy**: Confirm passwordless sudo is configured and `BECOME_PASSWORD` secret is set in GitHub.
+- **SSL certificates missing on deploy**: Run Bootstrap Infrastructure workflow first. The deploy playbook does NOT issue certificates.
+- **Nginx config fails**: The deploy playbook runs `nginx -t` before reloading. Check the rendered config at `/etc/nginx/conf.d/kydyrov.dev.conf`.
 
 ## References
 
