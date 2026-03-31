@@ -1,0 +1,64 @@
+name: Bootstrap Infrastructure
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  bootstrap:
+    runs-on: [self-hosted, linux]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Ansible
+        run: |
+          python -m pip install --upgrade pip
+          pip install ansible
+
+      - name: Set up SSH for remote bootstrap
+        if: ${{ runner.name != 'vps-1' }}
+        env:
+          SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Create Ansible inventory
+        run: |
+          if [ "$RUNNER_NAME" = "vps-1" ]; then
+            cat > infra/ansible/inventory.runner.ini <<EOF
+          [server]
+          localhost ansible_connection=local ansible_python_interpreter=/usr/bin/python3
+          EOF
+          else
+            cat > infra/ansible/inventory.runner.ini <<EOF
+          [server]
+          prod-target ansible_host=${{ secrets.SSH_HOST }} ansible_user=${{ secrets.SSH_USER }} ansible_python_interpreter=/usr/bin/python3 ansible_ssh_private_key_file=$HOME/.ssh/deploy_key
+          EOF
+          fi
+
+      - name: Run bootstrap playbook
+        env:
+          ANSIBLE_BECOME_PASSWORD: ${{ secrets.BECOME_PASSWORD }}
+          DEPLOY_CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        run: |
+          ANSIBLE_LOCAL_TEMP=/tmp/.ansible/tmp \
+          ansible-playbook \
+          -i infra/ansible/inventory.runner.ini \
+          infra/ansible/bootstrap.yml \
+          -e "ansible_become_password=${ANSIBLE_BECOME_PASSWORD}"
