@@ -27,13 +27,13 @@ Containerized fullstack pet project deployed to an Ubuntu VM with Ansible, Docke
 ```text
 GitHub Actions
     ↓
-Self-hosted runner on Ubuntu VM
+Self-hosted runner (vm-1 or vps-1)
     ↓
-Ansible
+Ansible (local or SSH to VPS)
     ↓
 Docker Compose
     ↓
-Nginx
+Nginx (HTTPS on prod)
   ├─ /        -> frontend
   ├─ /api/*   -> FastAPI backend
   └─ /health  -> backend health check
@@ -86,6 +86,7 @@ infra/
 .github/workflows/
   ci.yml
   deploy.yml
+  auto-deploy-prod.yml
   publish-images.yml
 ```
 
@@ -158,31 +159,27 @@ Notes:
 - For prod, `DEPLOY_IMAGE_TAG` must match the published GHCR tag format (`^[0-9a-f]{12}$`).
 - The prod tag must come from a successful `Publish Images` run on `main` (the workflow `sha_short` output).
 
-Cloudflare SSL rollout (recommended):
+SSL (production):
 
-1. Point DNS `A` records for `@` and `www` to the VPS IP.
-2. Keep records as `DNS only` for initial origin certificate issuance.
-3. Run production Ansible deploy with real `domain_name` and `ssl_email` so certbot can issue certificates on the VM.
-4. After origin cert is active, switch Cloudflare SSL/TLS mode to `Full (strict)`.
-5. Enable Cloudflare proxy (`Proxied`) after end-to-end HTTPS is confirmed.
-
-Temporary mode note:
-
-- `Flexible` can be used during DNS bring-up, but it is not end-to-end TLS and should not be the final mode.
+- Domain `kydyrov.dev` and `www.kydyrov.dev` are live with Let's Encrypt certificates.
+- Certificates are issued automatically during deploy via certbot Cloudflare DNS-01 challenge (requires `CF_API_TOKEN` secret).
+- Certbot renewal cron runs daily at 12:00 UTC, copies renewed certs into the runtime directory, and restarts nginx.
+- Cloudflare SSL/TLS mode should be set to `Full (strict)` with proxy enabled.
 
 GitHub Actions deploy:
 
-- runs on self-hosted runners with automatic environment-based routing:
-  - **Dev deploys** → `vm-1` runner (local VirtualBox VM)
-  - **Prod deploys** → `vps-1` runner (remote VPS)
-- executes the Ansible playbook locally on the respective runner
+- runs on self-hosted runners with smart routing:
+  - **Dev deploys** → `vm-1` runner (local VirtualBox VM), Ansible runs locally
+  - **Prod deploys** → any available self-hosted runner; if runner is `vps-1`, Ansible runs locally; otherwise Ansible connects to the VPS via SSH
 - is triggered manually with `workflow_dispatch` (dev or prod selector)
-- also supports automatic prod deploy after successful `Publish Images` on `main` (always uses `vps-1`)
+- also supports automatic prod deploy after successful `Publish Images` on `main` (any self-hosted runner)
 - auto deploy uses the published commit SHA (short tag) as the production image tag
+- GHCR authentication is performed by Ansible on the target host (not the runner)
 - keeps dev source-based and repo-synced on the VM
 - renders prod runtime files under `/opt/devops-platform`
 - pulls GHCR app images for prod and deploys them without destructive `down/prune` steps
 - records `current_release.env` and `previous_release.env` on the server for rollback metadata
+- SSL certificates are issued via certbot with Cloudflare DNS-01 challenge
 - See [.github/RUNNER_SETUP.md](.github/RUNNER_SETUP.md) for runner registration and labeling instructions
 
 Branch policy:
@@ -191,11 +188,15 @@ Branch policy:
 - deploy does not run on feature branches
 - feature branches cannot trigger auto-deploy (main-only)
 
-Required GitHub secret:
+Required GitHub secrets:
 
-- `BECOME_PASSWORD`
-- `DB_PASSWORD`
-- `SECRET_KEY`
+- `BECOME_PASSWORD` — Ansible become (sudo) password
+- `DB_PASSWORD` — PostgreSQL password
+- `SECRET_KEY` — FastAPI secret key
+- `CF_API_TOKEN` — Cloudflare API token for DNS-01 SSL issuance
+- `SSH_PRIVATE_KEY` — SSH key for remote Ansible when runner is not `vps-1`
+- `SSH_HOST` — VPS IP address
+- `SSH_USER` — SSH user on the VPS
 
 ## Operational Flow
 
@@ -212,7 +213,7 @@ Required GitHub secret:
 - Schema and release-bound data changes should be done through Alembic migrations
 - dev startup runs `alembic upgrade head` inside the backend container; that is convenient for single-instance local work, while prod uses a separate one-shot migration step
 - Production deploys should use immutable SHA image tags rather than mutable tags like `main`
-- SSL/domain configuration exists in the repo, but should be finalized only when a real domain is ready
+- SSL is live on `kydyrov.dev` with Let's Encrypt certificates issued via Cloudflare DNS-01
 
 ## Security Notes
 

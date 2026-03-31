@@ -13,7 +13,7 @@ This repository is a VM-based DevOps pet project with:
 - Ansible deployment
 - GitHub Actions CI
 - GHCR-backed production images for app services
-- self-hosted deploy runner on the VM
+- self-hosted deploy runners (`vps-1` on VPS, `vm-1` on local VM)
 - monitor-worker demo service and operational log
 - Alembic migrations for schema and release-bound data changes
 
@@ -26,11 +26,14 @@ This repository is a VM-based DevOps pet project with:
 ## Deployment Model
 
 - Deployments are driven by `infra/ansible/playbook.yml`.
-- GitHub Actions deploy runs on a self-hosted Linux runner installed on the VM.
-- The deploy workflow executes Ansible locally on the VM through a generated local inventory and is triggered manually.
-- `BECOME_PASSWORD`, `DB_PASSWORD`, and `SECRET_KEY` are the current GitHub secrets required for deploy.
+- Dev deploys run on `vm-1` (local VirtualBox VM); Ansible executes locally.
+- Prod deploys run on any available self-hosted runner (`vps-1` preferred). When the runner is `vps-1`, Ansible runs locally; otherwise it connects to the VPS via SSH.
+- Auto-deploy to prod triggers after successful `Publish Images` on `main` (any self-hosted runner).
+- Required GitHub secrets: `BECOME_PASSWORD`, `DB_PASSWORD`, `SECRET_KEY`, `CF_API_TOKEN`, `SSH_PRIVATE_KEY`, `SSH_HOST`, `SSH_USER`.
 - Production app services are pulled from GHCR; dev still builds from source locally.
+- GHCR authentication is performed by Ansible on the target host.
 - Prod runtime files are rendered into `/opt/devops-platform`; prod should not depend on an app git checkout on the server.
+- SSL is live on `kydyrov.dev` via Let's Encrypt + Cloudflare DNS-01.
 - CI runs on every push and pull request, including `feat/*` branches.
 - Deploy does not run from feature branches.
 
@@ -76,7 +79,7 @@ This repository is a VM-based DevOps pet project with:
 ## Be Careful About
 
 - Dev and prod Nginx behavior are different concerns.
-- Production domain and SSL behavior are not fully finalized yet.
+- Production SSL is live (`kydyrov.dev`); changes to cert issuance or Nginx TLS config affect a running site.
 - Documentation should reflect current implementation, not aspirational architecture.
 - CI/CD changes should match the actual runner and deployment setup already in use.
 
