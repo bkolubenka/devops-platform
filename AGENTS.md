@@ -15,6 +15,7 @@ This repository is a VM-based DevOps pet project with:
 - GHCR-backed production images for app services
 - self-hosted deploy runners (`vps-1` on VPS, `vm-1` on local VM)
 - monitor-worker demo service and operational log
+- Prometheus + Grafana observability with provisioned dashboards and anonymous Viewer access
 - Alembic migrations for schema and release-bound data changes
 
 ## Source Of Truth
@@ -80,6 +81,8 @@ This repository is a VM-based DevOps pet project with:
 
 - Dev and prod Nginx behavior are different concerns.
 - Production SSL is live (`kydyrov.dev`); changes to cert issuance or Nginx TLS config affect a running site.
+- Grafana is configured for anonymous Viewer access; changes to auth settings affect public dashboard visibility.
+- The deploy workflow auto-truncates image tags to 12 chars; do not change this without also updating publish-images.yml.
 - Documentation should reflect current implementation, not aspirational architecture.
 - CI/CD changes should match the actual runner and deployment setup already in use.
 

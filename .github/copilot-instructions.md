@@ -29,6 +29,8 @@ Keep changes aligned with the current VM-based deployment model.
 - SSL is live on `kydyrov.dev` via Let's Encrypt + Cloudflare DNS-01.
 - Required secrets: `BECOME_PASSWORD`, `DB_PASSWORD`, `SECRET_KEY`, `CF_API_TOKEN`, `SSH_PRIVATE_KEY`, `SSH_HOST`, `SSH_USER`.
 - `monitor-worker` is a non-critical service that records operational log entries for the incident assistant.
+- Prometheus + Grafana observability is provisioned automatically; Grafana has anonymous Viewer access enabled.
+- The deploy workflow auto-truncates `DEPLOY_IMAGE_TAG` to 12 chars to match the GHCR tag format.
 - Alembic migrations own schema and release-bound data changes.
 
 ## Working Rules

@@ -1,0 +1,251 @@
+- name: Bootstrap server infrastructure
+  hosts: all
+  become: true
+
+  tasks:
+    - name: Ensure APT keyrings directory exists
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Install Docker APT signing key
+      get_url:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        dest: /etc/apt/keyrings/docker.asc
+        mode: "0644"
+        force: true
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+
+    - name: Remove old Docker packages
+      apt:
+        name:
+          - docker.io
+          - docker-compose
+          - docker-doc
+          - podman-docker
+        state: absent
+        purge: yes
+
+    - name: Install infrastructure packages
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-compose-plugin
+          - certbot
+          - python3-certbot-dns-cloudflare
+          - ufw
+        state: present
+        update_cache: yes
+
+    - name: Ensure Docker is started
+      service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Wait for Docker socket
+      wait_for:
+        path: /var/run/docker.sock
+        timeout: 30
+
+    # --- Firewall (UFW) configuration ----------------------------------------
+
+    - name: Allow SSH through UFW (prevent lockout)
+      ufw:
+        rule: allow
+        port: '22'
+        proto: tcp
+
+    - name: Allow HTTP through UFW (certbot challenge and redirect)
+      ufw:
+        rule: allow
+        port: '80'
+        proto: tcp
+
+    - name: Allow HTTPS through UFW
+      ufw:
+        rule: allow
+        port: '443'
+        proto: tcp
+
+    - name: Enable UFW
+      ufw:
+        state: enabled
+
+    # --- SSL certificate issuance (Cloudflare DNS-01 or standalone) ----------
+
+    - name: Gather service facts
+      service_facts:
+
+    - name: Stop and disable system nginx when present
+      service:
+        name: nginx
+        state: stopped
+        enabled: false
+      when: "'nginx.service' in ansible_facts.services"
+
+    - name: Check for existing letsencrypt certificate
+      stat:
+        path: "/etc/letsencrypt/live/{{ domain_name }}/fullchain.pem"
+      register: existing_cert
+
+    - name: Check for existing letsencrypt private key
+      stat:
+        path: "/etc/letsencrypt/live/{{ domain_name }}/privkey.pem"
+      register: existing_key
+
+    - name: Set SSL issuance flag
+      set_fact:
+        ssl_needs_issue: "{{ not (existing_cert.stat.exists and existing_key.stat.exists) }}"
+
+    - name: Debug SSL status
+      debug:
+        msg: |
+          cert_exists={{ existing_cert.stat.exists | default(false) }}
+          key_exists={{ existing_key.stat.exists | default(false) }}
+          ssl_needs_issue={{ ssl_needs_issue }}
+          cf_api_token_length={{ cf_api_token | length }}
+
+    - name: Fail when Cloudflare API token is not provided
+      fail:
+        msg: >-
+          SSL issuance requires CF_API_TOKEN for Cloudflare DNS-01 challenge.
+          Set cf_api_token via -e or environment variable DEPLOY_CF_API_TOKEN.
+          For HTTP-01 fallback, pass -e allow_http01_fallback=true.
+      when:
+        - ssl_needs_issue | bool
+        - cf_api_token | length == 0
+        - not (allow_http01_fallback | bool)
+
+    - name: Write Cloudflare DNS credentials file for certbot
+      copy:
+        dest: /etc/letsencrypt/cloudflare.ini
+        content: "dns_cloudflare_api_token = {{ cf_api_token }}\n"
+        mode: "0600"
+      when:
+        - cf_api_token | length > 0
+
+    - name: Obtain SSL certificate via Cloudflare DNS-01 challenge
+      command: >-
+        certbot certonly
+        --dns-cloudflare
+        --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini
+        --dns-cloudflare-propagation-seconds 30
+        --agree-tos --email {{ ssl_email }}
+        -d {{ domain_name }} -d {{ domain_www }}
+        --non-interactive
+      register: certbot_dns_result
+      when:
+        - ssl_needs_issue | bool
+        - cf_api_token | length > 0
+
+    - name: Stop containers on ports 80/443 before standalone certbot
+      shell: |
+        set -e
+        ids=$(docker ps --filter "publish=80" --filter "publish=443" --format '{{ "{{" }}.ID{{ "}}" }}' | sort -u)
+        if [ -n "$ids" ]; then
+          docker stop $ids
+        fi
+        echo "$ids"
+      args:
+        executable: /bin/bash
+      register: port_stop_for_certbot
+      changed_when: "(port_stop_for_certbot.stdout | trim) != ''"
+      when:
+        - ssl_needs_issue | bool
+        - cf_api_token | length == 0
+        - allow_http01_fallback | bool
+
+    - name: Obtain SSL certificate via standalone HTTP-01 challenge
+      command: >-
+        certbot certonly --standalone
+        --agree-tos --email {{ ssl_email }}
+        -d {{ domain_name }} -d {{ domain_www }}
+        --non-interactive
+      register: certbot_standalone_result
+      failed_when: false
+      when:
+        - ssl_needs_issue | bool
+        - cf_api_token | length == 0
+        - allow_http01_fallback | bool
+
+    - name: Read letsencrypt log tail after certbot failure
+      command: tail -80 /var/log/letsencrypt/letsencrypt.log
+      register: le_log_tail
+      changed_when: false
+      when:
+        - certbot_standalone_result is defined
+        - certbot_standalone_result.rc | default(0) != 0
+        - allow_http01_fallback | bool
+
+    - name: Fail with detailed certbot diagnostics
+      fail:
+        msg: >-
+          Certbot standalone challenge failed.
+          If Cloudflare proxy is active (orange cloud), standalone HTTP-01
+          cannot work. Set the CF_API_TOKEN to use DNS-01 instead,
+          or temporarily disable Cloudflare proxy (grey cloud).
+          Certbot stderr: {{ certbot_standalone_result.stderr | default('unavailable') }}
+          Log tail: {{ le_log_tail.stdout | default('unavailable') }}
+      when:
+        - certbot_standalone_result is defined
+        - allow_http01_fallback | bool
+        - certbot_standalone_result.rc | default(0) != 0
+
+    - name: Verify SSL certificate exists after issuance
+      stat:
+        path: "/etc/letsencrypt/live/{{ domain_name }}/{{ item }}"
+      register: post_issue_cert_check
+      loop:
+        - fullchain.pem
+        - privkey.pem
+
+    - name: Fail if SSL certificate is still missing
+      fail:
+        msg: "SSL certificate for {{ domain_name }} is not present at /etc/letsencrypt/live/{{ domain_name }}/. Bootstrap cannot continue."
+      when: (post_issue_cert_check.results | selectattr('stat.exists', 'equalto', false) | list | length) > 0
+
+    # --- Copy certs to runtime directory for nginx container ------------------
+
+    - name: Ensure runtime SSL directory exists
+      file:
+        path: "{{ runtime_root }}/ssl"
+        state: directory
+        mode: "0755"
+
+    - name: Copy SSL certificates to runtime directory
+      copy:
+        src: "/etc/letsencrypt/live/{{ domain_name }}/{{ item }}"
+        dest: "{{ runtime_root }}/ssl/{{ item }}"
+        remote_src: yes
+        mode: "0600"
+      loop:
+        - fullchain.pem
+        - privkey.pem
+
+    # --- Auto-renewal cron ----------------------------------------------------
+
+    - name: Setup SSL renewal cron job
+      cron:
+        name: "SSL certificate renewal"
+        minute: "0"
+        hour: "12"
+        job: "certbot renew --quiet --deploy-hook 'cp /etc/letsencrypt/live/{{ domain_name }}/fullchain.pem {{ runtime_root }}/ssl/fullchain.pem; cp /etc/letsencrypt/live/{{ domain_name }}/privkey.pem {{ runtime_root }}/ssl/privkey.pem; chmod 600 {{ runtime_root }}/ssl/*.pem; docker compose -f {{ runtime_root }}/docker-compose.prod.yaml restart nginx'"
+
+    - name: Bootstrap complete
+      debug:
+        msg: |
+          Infrastructure bootstrap complete.
+          - Docker installed and running
+          - UFW enabled (22, 80, 443)
+          - SSL certificate issued for {{ domain_name }} and {{ domain_www }}
+          - Certificates synced to {{ runtime_root }}/ssl/
+          - Auto-renewal cron configured (daily 12:00 UTC)
+          Next: run playbook.yml to deploy the application.

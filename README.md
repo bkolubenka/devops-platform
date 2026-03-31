@@ -16,6 +16,7 @@ Containerized fullstack pet project deployed to an Ubuntu VM with Ansible, Docke
 - monitor-worker demo service that records platform health summaries and state transitions
 - worker-mediated service actions so the API queues intent and a separate runner executes it
 - GHCR-backed production images for app services
+- Prometheus + Grafana observability stack with provisioned dashboards and embedded live metrics
 - build metadata footer with app version, image tag, build id, and pinned component versions
 - Nginx reverse proxy on the VM
 - Ansible-based deployment
@@ -167,11 +168,15 @@ If Ollama is unavailable or returns invalid output, the API automatically falls 
 - `monitor-worker` exposes probe metrics at `:9000/metrics`.
 - Prometheus scrapes backend and monitor-worker every 30 seconds.
 - Grafana dashboards and datasource are provisioned from `infra/monitoring/grafana/`.
+- Grafana allows anonymous read-only access (Viewer role); admin account retains full control.
+- The Observability tab on the portal embeds the Grafana dashboard inline via iframe (kiosk mode).
+- Dashboard panels: HTTP request rate, error rate, p95 latency, incidents created, requests by endpoint, service probe success rate, probe latency p95, incident assistant mode.
+- Scanner/bot endpoints (`.env`, `.php`) are filtered from the requests-by-endpoint panel.
 
 Production access:
 
-- `https://kydyrov.dev/grafana/`
-- `https://kydyrov.dev/prometheus/`
+- `https://kydyrov.dev/grafana/d/devops-platform-overview/devops-platform-overview` (dashboard)
+- `https://kydyrov.dev/prometheus/targets`
 
 Both are routed through Nginx on 443; production does not require exposing 3000/9090 publicly.
 
@@ -200,7 +205,7 @@ Notes:
 
 - `repo_url` already has a safe default in `infra/ansible/group_vars/all.yml`; pass `-e repo_url=...` only when overriding it for a specific run.
 - Do not use placeholder URLs like `https://github.com/your/repo.git`.
-- For prod, `DEPLOY_IMAGE_TAG` must match the published GHCR tag format (`^[0-9a-f]{12}$`).
+- For prod, `DEPLOY_IMAGE_TAG` must be a SHA hex string (7-40 chars); the deploy workflow auto-truncates it to 12 chars to match the published GHCR tag format.
 - The prod tag must come from a successful `Publish Images` run on `main` (the workflow `sha_short` output).
 
 SSL (production):
@@ -271,3 +276,4 @@ Required GitHub secrets:
 - replace the demo AI endpoint with a real model-backed service or RAG layer
 - split Nginx config cleanly for dev vs prod
 - add targeted tests for incident autofill and service actions
+- add more Grafana dashboards (per-service detail, database metrics)

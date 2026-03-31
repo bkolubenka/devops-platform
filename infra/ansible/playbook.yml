@@ -10,10 +10,7 @@
       - docker-compose-plugin
     dev_packages:
       - git
-    prod_packages:
-      - certbot
-      - python3-certbot-dns-cloudflare
-      - ufw
+    prod_packages: []
 
   tasks:
     - name: Validate deploy environment
@@ -170,102 +167,50 @@
         msg: "Set domain_name and ssl_email to real production values before deploying prod."
       when: deploy_env == 'prod' and (domain_name == 'yourdomain.com' or ssl_email == 'admin@yourdomain.com')
 
-    # --- Firewall (UFW) configuration for production --------------------------
+    # --- SSL certificate sync (certs must already exist via bootstrap.yml) ----
 
-    - name: Allow SSH through UFW (prevent lockout)
-      ufw:
-        rule: allow
-        port: '22'
-        proto: tcp
-      when: deploy_env == 'prod'
-
-    - name: Allow HTTP through UFW (certbot challenge and redirect)
-      ufw:
-        rule: allow
-        port: '80'
-        proto: tcp
-      when: deploy_env == 'prod'
-
-    - name: Allow HTTPS through UFW
-      ufw:
-        rule: allow
-        port: '443'
-        proto: tcp
-      when: deploy_env == 'prod'
-
-    - name: Enable UFW
-      ufw:
-        state: enabled
-      when: deploy_env == 'prod'
-
-    # ---------------------------------------------------------------------------
-
-    - name: Check for letsencrypt production certificate
+    - name: Check for letsencrypt SSL certificate
       stat:
         path: "/etc/letsencrypt/live/{{ domain_name }}/fullchain.pem"
-      become: true
       register: prod_certificate_stat
       when: deploy_env == 'prod'
 
-    - name: Check for letsencrypt production private key
+    - name: Check for letsencrypt SSL private key
       stat:
         path: "/etc/letsencrypt/live/{{ domain_name }}/privkey.pem"
-      become: true
       register: prod_private_key_stat
       when: deploy_env == 'prod'
+
+    - name: Fail when SSL certificates are missing (run bootstrap.yml first)
+      fail:
+        msg: >-
+          SSL certificates not found at /etc/letsencrypt/live/{{ domain_name }}/.
+          Run bootstrap.yml first to issue certificates:
+          ansible-playbook -i inventory.ini bootstrap.yml -e "deploy_env=prod"
+      when:
+        - deploy_env == 'prod'
+        - not (prod_certificate_stat.stat.exists | default(false)) or not (prod_private_key_stat.stat.exists | default(false))
 
     - name: Check for runtime SSL certificate
       stat:
         path: "{{ runtime_root }}/ssl/fullchain.pem"
-      become: true
       register: runtime_certificate_stat
       when: deploy_env == 'prod'
 
-    - name: Check for runtime SSL private key
-      stat:
-        path: "{{ runtime_root }}/ssl/privkey.pem"
-      become: true
-      register: runtime_private_key_stat
-      when: deploy_env == 'prod'
-
-    - name: Set SSL source/runtime readiness flags
-      set_fact:
-        ssl_source_cert_ready: "{{ (prod_certificate_stat.stat.exists | default(false)) and (prod_private_key_stat.stat.exists | default(false)) }}"
-        ssl_runtime_cert_ready: "{{ (runtime_certificate_stat.stat.exists | default(false)) and (runtime_private_key_stat.stat.exists | default(false)) }}"
-      when: deploy_env == 'prod'
-
-    - name: Determine whether SSL certificate issuance is needed
-      set_fact:
-        ssl_needs_issue: "{{ not ssl_source_cert_ready }}"
-        ssl_needs_runtime_sync: "{{ ssl_source_cert_ready and (not ssl_runtime_cert_ready) }}"
-      when: deploy_env == 'prod'
-
-    - name: Debug SSL certificate detection
-      debug:
-        msg: |
-          prod_cert_exists={{ prod_certificate_stat.stat.exists | default('undefined') }}
-          prod_key_exists={{ prod_private_key_stat.stat.exists | default('undefined') }}
-          runtime_cert_exists={{ runtime_certificate_stat.stat.exists | default('undefined') }}
-          runtime_key_exists={{ runtime_private_key_stat.stat.exists | default('undefined') }}
-          ssl_source_cert_ready={{ ssl_source_cert_ready }}
-          ssl_runtime_cert_ready={{ ssl_runtime_cert_ready }}
-          ssl_needs_issue={{ ssl_needs_issue }}
-          ssl_needs_runtime_sync={{ ssl_needs_runtime_sync }}
-          cf_api_token_length={{ cf_api_token | length }}
-      when: deploy_env == 'prod'
-
-    - name: Fail fast when DNS-01 token is missing and HTTP-01 fallback is disabled
-      fail:
-        msg: >-
-          SSL issuance is required, but DEPLOY_CF_API_TOKEN is empty and
-          DEPLOY_ALLOW_HTTP01_FALLBACK is false. Set CF_API_TOKEN in GitHub
-          secrets for DNS-01 (recommended), or explicitly set
-          DEPLOY_ALLOW_HTTP01_FALLBACK=true to attempt standalone HTTP-01.
+    - name: Sync SSL certificates to runtime directory
+      copy:
+        src: "/etc/letsencrypt/live/{{ domain_name }}/{{ item }}"
+        dest: "{{ runtime_root }}/ssl/{{ item }}"
+        remote_src: yes
+        mode: "0600"
+      loop:
+        - fullchain.pem
+        - privkey.pem
       when:
         - deploy_env == 'prod'
-        - ssl_needs_issue | default(false) | bool
-        - cf_api_token | length == 0
-        - not (allow_http01_fallback | bool)
+        - not (runtime_certificate_stat.stat.exists | default(false))
+
+    # ---------------------------------------------------------------------------
 
     - name: Validate dev repo_url is not a placeholder
       assert:
@@ -297,116 +242,6 @@
         force: true
         update: true
       when: deploy_env == 'dev'
-
-    # --- SSL certificate issuance (Cloudflare DNS-01 or standalone) ----------
-
-    - name: Write Cloudflare DNS credentials file for certbot
-      copy:
-        dest: /etc/letsencrypt/cloudflare.ini
-        content: "dns_cloudflare_api_token = {{ cf_api_token }}\n"
-        mode: "0600"
-      when:
-        - deploy_env == 'prod'
-        - cf_api_token | length > 0
-
-    - name: Obtain SSL certificate via Cloudflare DNS-01 challenge
-      command: >-
-        certbot certonly
-        --dns-cloudflare
-        --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini
-        --dns-cloudflare-propagation-seconds 30
-        --agree-tos --email {{ ssl_email }}
-        -d {{ domain_name }} -d {{ domain_www }}
-        --non-interactive
-      register: certbot_dns_result
-      when:
-        - deploy_env == 'prod'
-        - ssl_needs_issue | default(false) | bool
-        - cf_api_token | length > 0
-
-    - name: Stop containers on ports 80 and 443 before standalone certbot
-      shell: |
-        set -e
-        ids=$(docker ps --filter "publish=80" --filter "publish=443" --format '{{ "{{" }}.ID{{ "}}" }}' | sort -u)
-        if [ -n "$ids" ]; then
-          docker stop $ids
-        fi
-        echo "$ids"
-      args:
-        executable: /bin/bash
-      register: port_stop_for_certbot
-      changed_when: "(port_stop_for_certbot.stdout | trim) != ''"
-      when:
-        - deploy_env == 'prod'
-        - ssl_needs_issue | default(false) | bool
-        - cf_api_token | length == 0
-        - allow_http01_fallback | bool
-
-    - name: Obtain SSL certificate via standalone HTTP-01 challenge
-      command: certbot certonly --standalone --agree-tos --email {{ ssl_email }} -d {{ domain_name }} -d {{ domain_www }} --non-interactive
-      register: certbot_standalone_result
-      failed_when: false
-      when:
-        - deploy_env == 'prod'
-        - ssl_needs_issue | default(false) | bool
-        - cf_api_token | length == 0
-        - allow_http01_fallback | bool
-
-    - name: Read letsencrypt log tail after certbot failure
-      command: tail -80 /var/log/letsencrypt/letsencrypt.log
-      register: le_log_tail
-      changed_when: false
-      when:
-        - deploy_env == 'prod'
-        - certbot_standalone_result is defined
-        - certbot_standalone_result.rc | default(0) != 0
-        - allow_http01_fallback | bool
-
-    - name: Fail with detailed certbot diagnostics
-      fail:
-        msg: >-
-          Certbot standalone challenge failed.
-          If Cloudflare proxy is active (orange cloud), standalone HTTP-01
-          cannot work. Set the CF_API_TOKEN secret to use DNS-01 instead,
-          or temporarily disable Cloudflare proxy (grey cloud) during deploy.
-          Certbot stderr: {{ certbot_standalone_result.stderr | default('unavailable') }}
-          Log tail: {{ le_log_tail.stdout | default('unavailable') }}
-      when:
-        - deploy_env == 'prod'
-        - certbot_standalone_result is defined
-        - allow_http01_fallback | bool
-        - certbot_standalone_result.rc | default(0) != 0
-
-    - name: Refresh letsencrypt SSL certificate status after issuance attempts
-      stat:
-        path: "/etc/letsencrypt/live/{{ domain_name }}/{{ item }}"
-      become: true
-      register: letsencrypt_runtime_files_after_issue
-      loop:
-        - fullchain.pem
-        - privkey.pem
-      when: deploy_env == 'prod'
-
-    - name: Ensure letsencrypt source files are available before runtime sync
-      fail:
-        msg: "Missing letsencrypt SSL files for {{ domain_name }} after issuance attempt. Cannot sync runtime SSL certificates."
-      when:
-        - deploy_env == 'prod'
-        - (letsencrypt_runtime_files_after_issue.results | selectattr('stat.exists', 'equalto', false) | list | length) > 0
-        - ssl_needs_issue | default(false) | bool
-
-    - name: Copy SSL certificates from letsencrypt into runtime directory
-      copy:
-        src: "/etc/letsencrypt/live/{{ domain_name }}/{{ item }}"
-        dest: "{{ runtime_root }}/ssl/{{ item }}"
-        remote_src: yes
-        mode: "0600"
-      loop:
-        - fullchain.pem
-        - privkey.pem
-      when:
-        - deploy_env == 'prod'
-        - ssl_needs_issue | default(false) | bool or ssl_needs_runtime_sync | default(false) | bool
 
     - name: Render prod runtime compose file
       template:
@@ -591,12 +426,4 @@
         src: release.env.j2
         dest: "{{ runtime_current_release_file }}"
         mode: "0600"
-      when: deploy_env == 'prod'
-
-    - name: Setup SSL renewal cron job
-      cron:
-        name: "SSL certificate renewal"
-        minute: "0"
-        hour: "12"
-        job: "certbot renew --quiet --deploy-hook 'cp /etc/letsencrypt/live/{{ domain_name }}/fullchain.pem {{ runtime_root }}/ssl/fullchain.pem; cp /etc/letsencrypt/live/{{ domain_name }}/privkey.pem {{ runtime_root }}/ssl/privkey.pem; chmod 600 {{ runtime_root }}/ssl/*.pem; docker compose -f {{ runtime_root }}/docker-compose.prod.yaml restart nginx'"
       when: deploy_env == 'prod'
