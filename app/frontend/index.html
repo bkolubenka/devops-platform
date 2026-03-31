@@ -544,6 +544,7 @@
           <a href="/#services" class="nav-link" data-section="services">Services</a>
           <a href="/#incidents" class="nav-link" data-section="incidents">Incidents</a>
           <a href="/#ai" class="nav-link" data-section="ai">Incident Assistant</a>
+          <a href="/#observability" class="nav-link" data-section="observability">Observability</a>
           <a href="/resume/" class="nav-link">Resume</a>
         </div>
       </div>
@@ -789,6 +790,48 @@
               <div id="ai-output" class="ai-output">
                 Select a service, describe the symptoms, and the assistant will return incident class, likely causes, and next checks.
               </div>
+            </section>
+          </div>
+        </section>
+
+        <section id="observability" class="section">
+          <p class="eyebrow">Metrics & Monitoring</p>
+          <h1>Observability</h1>
+          <p>
+            Real-time platform health derived from the overview API and probe data collected by the monitor-worker.
+            Prometheus scrapes <code>/metrics</code> from backend and monitor-worker every 30 seconds.
+            Grafana dashboards are provisioned automatically.
+          </p>
+
+          <section class="summary-grid" id="observability-metrics" style="margin-top: 28px;"></section>
+
+          <div class="section-layout" style="margin-top: 24px;">
+            <section class="panel">
+              <p class="eyebrow">Recent Incidents</p>
+              <h2>Last 5 Events</h2>
+              <div id="observability-incidents" class="stack"></div>
+            </section>
+
+            <section class="panel">
+              <p class="eyebrow">External Tools</p>
+              <h2>Dashboards</h2>
+              <div class="detail-list">
+                <div class="detail-item">
+                  <span>Grafana</span>
+                  <a id="grafana-link" href="#" target="_blank" rel="noreferrer" class="contact-item" style="border:none;padding:0;">
+                    Open Grafana &rarr;
+                  </a>
+                </div>
+                <div class="detail-item">
+                  <span>Prometheus</span>
+                  <a id="prometheus-link" href="#" target="_blank" rel="noreferrer" class="contact-item" style="border:none;padding:0;">
+                    Open Prometheus &rarr;
+                  </a>
+                </div>
+              </div>
+              <p class="metric-meta" style="margin-top:16px;">
+                Prometheus: port 9090 &middot; Grafana: port 3000 &middot; Scrape interval: 30s &middot; Retention: 7 days
+              </p>
             </section>
           </div>
         </section>
@@ -1323,6 +1366,78 @@
         return apiRequest(`/api/incidents/${id}`);
       }
 
+      async function loadObservability() {
+        const metricsEl = document.getElementById("observability-metrics");
+        const incidentsEl = document.getElementById("observability-incidents");
+        const grafanaLink = document.getElementById("grafana-link");
+        const prometheusLink = document.getElementById("prometheus-link");
+
+        const host = window.location.hostname;
+        grafanaLink.href = `http://${host}:3000`;
+        prometheusLink.href = `http://${host}:9090`;
+
+        try {
+          const [overview, incidents] = await Promise.all([
+            apiRequest("/api/overview"),
+            apiRequest("/api/incidents"),
+          ]);
+
+          const openIncidents = incidents.filter((i) => i.status === "open").length;
+          const highSeverity = incidents.filter(
+            (i) => (i.severity === "high" || i.severity === "critical") && i.status === "open"
+          ).length;
+
+          metricsEl.innerHTML = `
+            <article class="card">
+              <div class="label">Healthy Services</div>
+              <div class="metric ${overview.healthy_service_count === overview.service_count ? "ok" : "bad"}">
+                ${overview.healthy_service_count} / ${overview.service_count}
+              </div>
+              <p class="metric-meta">Services passing their health probe.</p>
+            </article>
+            <article class="card">
+              <div class="label">Open Incidents</div>
+              <div class="metric ${openIncidents === 0 ? "ok" : openIncidents > 3 ? "bad" : "warn"}">${openIncidents}</div>
+              <p class="metric-meta">${highSeverity} high/critical severity.</p>
+            </article>
+            <article class="card">
+              <div class="label">Backend</div>
+              <div class="metric ${statusClass(overview.backend_status)}">${overview.backend_status}</div>
+              <p class="metric-meta">API health inside container.</p>
+            </article>
+            <article class="card">
+              <div class="label">Database</div>
+              <div class="metric ${statusClass(overview.database_status)}">${overview.database_status}</div>
+              <p class="metric-meta">PostgreSQL reachability.</p>
+            </article>
+          `;
+
+          const recent = incidents.slice(0, 5);
+          if (recent.length === 0) {
+            incidentsEl.innerHTML = '<div class="empty">No operational records yet.</div>';
+          } else {
+            incidentsEl.innerHTML = recent
+              .map(
+                (incident) => `
+                  <article class="card">
+                    <p class="card-title">${escapeHtml(incident.title)}</p>
+                    <div class="muted-row">
+                      <span class="${statusClass(incident.severity)}">${escapeHtml(incident.severity)}</span>
+                      <span>${escapeHtml(incident.status)}</span>
+                      <span>${escapeHtml(incident.source || "manual")}</span>
+                      <span>${escapeHtml(formatTimestamp(incident.created_at))}</span>
+                    </div>
+                  </article>
+                `
+              )
+              .join("");
+          }
+        } catch (error) {
+          metricsEl.innerHTML = `<div class="empty">Failed to load observability data: ${escapeHtml(error.message)}</div>`;
+          incidentsEl.innerHTML = "";
+        }
+      }
+
       async function refreshPortal() {
         await Promise.all([
           loadHealth(),
@@ -1345,6 +1460,7 @@
           if (sectionId === "portfolio") await loadProjects();
           if (sectionId === "services") await loadServices();
           if (sectionId === "incidents") await loadIncidents();
+          if (sectionId === "observability") await loadObservability();
         });
       });
 
@@ -1356,6 +1472,7 @@
         if (sectionId === "portfolio") await loadProjects();
         if (sectionId === "services") await loadServices();
         if (sectionId === "incidents") await loadIncidents();
+        if (sectionId === "observability") await loadObservability();
       });
 
       document.getElementById("project-form").addEventListener("submit", async (event) => {

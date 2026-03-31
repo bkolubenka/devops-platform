@@ -140,6 +140,20 @@ DATABASE_URL=sqlite:// python -m pytest backend/tests/ -v
 
 Tests use an in-memory SQLite database — no Postgres required. CI runs them automatically on every push.
 
+## Incident Assistant (Optional Ollama)
+
+The incident assistant remains deterministic by default (keyword + runbook based).
+You can optionally enrich the response with Ollama using existing incident history as context.
+
+Environment variables:
+
+- `INCIDENT_ASSISTANT_USE_OLLAMA=true` to enable Ollama enrichment
+- `OLLAMA_BASE_URL=http://127.0.0.1:11434` (default)
+- `OLLAMA_MODEL=llama3.1:8b` (default)
+- `OLLAMA_TIMEOUT_SECONDS=8` (default, clamped to 1..30)
+
+If Ollama is unavailable or returns invalid output, the API automatically falls back to the deterministic runbook response.
+
 ## VM Deploy
 
 Manual deploy:

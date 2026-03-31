@@ -2,6 +2,15 @@
 
 Keep changes aligned with the current VM-based deployment model.
 
+## VPS Specs (Production)
+
+- Provider: Hetzner, plan CX23
+- Name: `devops-platform-prod-1` (ID #125238914)
+- IP: `204.168.184.213`, IPv6: `2a01:4f9:c013:37bc::/64`
+- Resources: 2 vCPU · 4 GB RAM · 40 GB local disk
+- Traffic: 20 TB/mo out · datacenter `hel1-dc2` (Helsinki, EU-central)
+- Budget: €3.49/mo — keep memory footprint low; prefer short retention and lightweight services.
+
 ## Project Facts
 
 - FastAPI backend serves `/health` and `/api/*`.
