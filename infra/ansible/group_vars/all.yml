@@ -20,6 +20,10 @@ db_user: "{{ lookup('env', 'DEPLOY_DB_USER') | default('devops_user', true) }}"
 db_password: "{{ lookup('env', 'DEPLOY_DB_PASSWORD') | default('devops_password', true) }}"
 secret_key: "{{ lookup('env', 'DEPLOY_SECRET_KEY') | default('change-me', true) }}"
 ghcr_token: "{{ lookup('env', 'DEPLOY_GHCR_TOKEN') | default('', true) }}"
+incident_assistant_use_ollama: "{{ lookup('env', 'DEPLOY_INCIDENT_ASSISTANT_USE_OLLAMA') | default('false', true) }}"
+ollama_base_url: "{{ lookup('env', 'DEPLOY_OLLAMA_BASE_URL') | default('http://127.0.0.1:11434', true) }}"
+ollama_model: "{{ lookup('env', 'DEPLOY_OLLAMA_MODEL') | default('llama3.1:8b', true) }}"
+ollama_timeout_seconds: "{{ lookup('env', 'DEPLOY_OLLAMA_TIMEOUT_SECONDS') | default('8', true) }}"
 
 # Environment-specific settings
 deploy_env: "{{ lookup('env', 'DEPLOY_ENV') | default('dev', true) }}"

@@ -35,6 +35,11 @@ COMPONENT_VERSIONS = {
     "Nginx": "1.27-alpine",
 }
 
+OLLAMA_ENABLED_ENV = "INCIDENT_ASSISTANT_USE_OLLAMA"
+OLLAMA_BASE_URL_ENV = "OLLAMA_BASE_URL"
+OLLAMA_MODEL_ENV = "OLLAMA_MODEL"
+OLLAMA_TIMEOUT_ENV = "OLLAMA_TIMEOUT_SECONDS"
+
 INCIDENT_RUNBOOKS: dict[str, dict[str, Any]] = {
     "service_unavailable": {
         "priority": "high",
@@ -519,6 +524,201 @@ def dump_json_value(value: Any) -> str:
     return json.dumps(value, default=str, separators=(",", ":"))
 
 
+def env_flag(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def get_ollama_timeout_seconds() -> float:
+    raw_timeout = os.getenv(OLLAMA_TIMEOUT_ENV, "8")
+    try:
+        timeout = float(raw_timeout)
+    except ValueError:
+        timeout = 8.0
+    return min(max(timeout, 1.0), 30.0)
+
+
+def list_recent_incidents_for_context(
+    db: Session,
+    service_context: IncidentServiceContext,
+    incident_class: str,
+    limit: int = 6,
+) -> list[dict[str, str]]:
+    if service_context.id is None:
+        return []
+
+    incidents = (
+        db.query(DBIncident)
+        .filter(
+            DBIncident.is_active.is_(True),
+            DBIncident.affected_service_id == service_context.id,
+        )
+        .order_by(DBIncident.id.desc())
+        .limit(limit)
+        .all()
+    )
+
+    context_entries: list[dict[str, str]] = []
+    for incident in incidents:
+        entry = {
+            "title": incident.title,
+            "severity": incident.severity,
+            "status": incident.status,
+            "source": incident.source or "manual",
+            "summary": incident.summary,
+            "symptoms": incident.symptoms,
+            "recent_changes": incident.recent_changes or "",
+        }
+        if incident.analysis:
+            try:
+                parsed_analysis = json.loads(incident.analysis)
+                if isinstance(parsed_analysis, dict):
+                    historical_class = parsed_analysis.get("incident_class")
+                    if isinstance(historical_class, str):
+                        entry["incident_class"] = historical_class
+            except json.JSONDecodeError:
+                pass
+        context_entries.append(entry)
+
+    same_class_entries = [
+        entry
+        for entry in context_entries
+        if entry.get("incident_class") == incident_class
+    ]
+    other_entries = [
+        entry
+        for entry in context_entries
+        if entry.get("incident_class") != incident_class
+    ]
+    return (same_class_entries + other_entries)[:limit]
+
+
+def normalize_advice_items(value: Any, limit: int = 6) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    normalized: list[str] = []
+    for item in value:
+        if isinstance(item, str):
+            cleaned = item.strip()
+            if cleaned:
+                normalized.append(cleaned[:240])
+    return normalized[:limit]
+
+
+def merge_advice(llm_items: list[str], rule_items: list[str], limit: int = 8) -> list[str]:
+    merged: list[str] = []
+    seen: set[str] = set()
+    for item in llm_items + rule_items:
+        key = item.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(item)
+        if len(merged) >= limit:
+            break
+    return merged
+
+
+def extract_json_object(raw_response: str) -> Optional[dict[str, Any]]:
+    try:
+        parsed = json.loads(raw_response)
+    except json.JSONDecodeError:
+        start = raw_response.find("{")
+        end = raw_response.rfind("}")
+        if start == -1 or end == -1 or end <= start:
+            return None
+        try:
+            parsed = json.loads(raw_response[start : end + 1])
+        except json.JSONDecodeError:
+            return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def request_ollama_guidance(
+    db: Session,
+    payload: IncidentRequest,
+    service_context: IncidentServiceContext,
+    incident_class: str,
+    suspected_causes: list[str],
+    recommended_checks: list[str],
+    suggested_runbook: list[str],
+) -> Optional[dict[str, Any]]:
+    if not env_flag(OLLAMA_ENABLED_ENV, default=False):
+        return None
+
+    ollama_base_url = os.getenv(OLLAMA_BASE_URL_ENV, "http://127.0.0.1:11434").rstrip("/")
+    ollama_model = os.getenv(OLLAMA_MODEL_ENV, "llama3.1:8b")
+    timeout_seconds = get_ollama_timeout_seconds()
+
+    history_entries = list_recent_incidents_for_context(
+        db, service_context, incident_class
+    )
+
+    prompt = (
+        "You are an incident response assistant.\n"
+        "Given the incident and historical context, return STRICT JSON only with these keys:\n"
+        "suspected_causes (array of strings), recommended_checks (array of strings), "
+        "suggested_runbook (array of strings), confidence (low|medium|high).\n"
+        "Do not include markdown or explanation outside JSON.\n\n"
+        f"Current incident class: {incident_class}\n"
+        f"Severity: {payload.severity}\n"
+        f"Summary: {payload.summary}\n"
+        f"Symptoms: {payload.symptoms}\n"
+        f"Recent changes: {payload.recent_changes or 'none'}\n"
+        f"Service context: {json.dumps(service_context.model_dump(), separators=(',', ':'))}\n"
+        f"Historical incidents: {json.dumps(history_entries, separators=(',', ':'))}\n"
+        f"Rule-based suspected causes: {json.dumps(suspected_causes, separators=(',', ':'))}\n"
+        f"Rule-based checks: {json.dumps(recommended_checks, separators=(',', ':'))}\n"
+        f"Rule-based runbook: {json.dumps(suggested_runbook, separators=(',', ':'))}\n"
+    )
+
+    try:
+        response = httpx.post(
+            f"{ollama_base_url}/api/generate",
+            json={
+                "model": ollama_model,
+                "prompt": prompt,
+                "stream": False,
+            },
+            timeout=timeout_seconds,
+        )
+        response.raise_for_status()
+        payload_json = response.json()
+        raw_model_output = payload_json.get("response")
+    except (httpx.HTTPError, ValueError, json.JSONDecodeError):
+        return None
+
+    if not isinstance(raw_model_output, str):
+        return None
+
+    parsed_output = extract_json_object(raw_model_output)
+    if not parsed_output:
+        return None
+
+    llm_causes = normalize_advice_items(parsed_output.get("suspected_causes"))
+    llm_checks = normalize_advice_items(parsed_output.get("recommended_checks"))
+    llm_runbook = normalize_advice_items(parsed_output.get("suggested_runbook"))
+    llm_confidence = parsed_output.get("confidence")
+    if not isinstance(llm_confidence, str) or llm_confidence not in {
+        "low",
+        "medium",
+        "high",
+    }:
+        llm_confidence = None
+
+    if not any([llm_causes, llm_checks, llm_runbook]):
+        return None
+
+    return {
+        "suspected_causes": llm_causes,
+        "recommended_checks": llm_checks,
+        "suggested_runbook": llm_runbook,
+        "confidence": llm_confidence,
+    }
+
+
 def record_incident_entry(
     db: Session,
     *,
@@ -797,10 +997,33 @@ def build_incident_analysis(
             f"Current service health probe is failing: {service_context.health_detail}"
         )
 
+    llm_guidance = request_ollama_guidance(
+        db,
+        payload,
+        service_context,
+        incident_class,
+        suspected_causes,
+        recommended_checks,
+        suggested_runbook,
+    )
+    confidence = runbook["confidence"]
+    if llm_guidance:
+        suspected_causes = merge_advice(
+            llm_guidance["suspected_causes"], suspected_causes
+        )
+        recommended_checks = merge_advice(
+            llm_guidance["recommended_checks"], recommended_checks
+        )
+        suggested_runbook = merge_advice(
+            llm_guidance["suggested_runbook"], suggested_runbook
+        )
+        if llm_guidance.get("confidence"):
+            confidence = llm_guidance["confidence"]
+
     return IncidentAnalysisResponse(
         incident_class=incident_class,
         priority=runbook["priority"] if payload.severity in {"low", "medium"} else payload.severity,
-        confidence=runbook["confidence"],
+        confidence=confidence,
         suspected_causes=suspected_causes,
         recommended_checks=recommended_checks,
         suggested_runbook=suggested_runbook,

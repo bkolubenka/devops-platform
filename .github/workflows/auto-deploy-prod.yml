@@ -87,6 +87,10 @@ jobs:
           DEPLOY_CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           DEPLOY_ALLOW_HTTP01_FALLBACK: false
           DEPLOY_GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEPLOY_INCIDENT_ASSISTANT_USE_OLLAMA: ${{ vars.INCIDENT_ASSISTANT_USE_OLLAMA }}
+          DEPLOY_OLLAMA_BASE_URL: ${{ vars.OLLAMA_BASE_URL }}
+          DEPLOY_OLLAMA_MODEL: ${{ vars.OLLAMA_MODEL }}
+          DEPLOY_OLLAMA_TIMEOUT_SECONDS: ${{ vars.OLLAMA_TIMEOUT_SECONDS }}
         run: |
           ANSIBLE_LOCAL_TEMP=/tmp/.ansible/tmp \
           ansible-playbook \
