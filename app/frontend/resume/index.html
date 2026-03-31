@@ -294,17 +294,7 @@
   </head>
   <body>
     <nav>
-      <div class="nav-shell">
-        <h1 class="brand">DevOps Platform</h1>
-        <div class="nav-links">
-          <a href="/#home" class="nav-link">Overview</a>
-          <a href="/#portfolio" class="nav-link">Projects</a>
-          <a href="/#services" class="nav-link">Services</a>
-          <a href="/#incidents" class="nav-link">Incidents</a>
-          <a href="/#ai" class="nav-link">Incident Assistant</a>
-          <a href="/resume/" class="nav-link active">Resume</a>
-        </div>
-      </div>
+      <div id="shared-nav-root"></div>
     </nav>
 
     <div class="page-shell">
@@ -426,7 +416,10 @@
       </main>
     </div>
 
+    <script src="/shared-nav.js"></script>
     <script>
+      renderSharedNav("resume");
+
       // Simple script to load build footer, similar to main page
       async function loadBuildFooter() {
         const footer = document.getElementById("build-footer");
