@@ -26,6 +26,9 @@ permissions:
   contents: read
   packages: read
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   deploy:
     runs-on: ${{ inputs.deploy_env == 'dev' && 'vm-1' || 'self-hosted' }}
