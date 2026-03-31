@@ -202,6 +202,19 @@
 
     # --- Ensure nginx is running ----------------------------------------------
 
+    - name: Stop Docker containers occupying ports 80/443
+      shell: |
+        set -e
+        ids=$(docker ps --filter "publish=80" --filter "publish=443" --format '{{ "{{" }}.ID{{ "}}" }}' | sort -u)
+        if [ -n "$ids" ]; then
+          docker stop $ids
+        fi
+        echo "$ids"
+      args:
+        executable: /bin/bash
+      register: port_stop_for_nginx
+      changed_when: "(port_stop_for_nginx.stdout | trim) != ''"
+
     - name: Ensure nginx is started and enabled
       service:
         name: nginx
