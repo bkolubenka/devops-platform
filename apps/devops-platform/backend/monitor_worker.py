@@ -298,6 +298,15 @@ def classify_change(previous: dict[str, Any], current: dict[str, Any]) -> tuple[
     )
 
 
+def _format_service_list(names: list[str]) -> str:
+    """Join names with commas and 'and' before the last item."""
+    if len(names) <= 1:
+        return names[0] if names else ""
+    if len(names) == 2:
+        return f"{names[0]} and {names[1]}"
+    return ", ".join(names[:-1]) + f", and {names[-1]}"
+
+
 def log_change_events(db_session, previous_states: dict[str, dict[str, Any]], current_states: dict[str, dict[str, Any]]) -> None:
     if not current_states:
         return
@@ -361,8 +370,8 @@ def log_change_events(db_session, previous_states: dict[str, dict[str, Any]], cu
             affected_service_id=monitor_service_id,
             severity="low",
             summary="All monitored platform services were healthy in the latest sweep.",
-            symptoms=", ".join(
-                state.get("name", "unknown") for state in current_states.values()
+            symptoms=_format_service_list(
+                [state.get("name", "unknown") for state in current_states.values()]
             ) + " checks passed.",
             recent_changes="No state changes detected during the current monitor cycle.",
             status="resolved",

@@ -859,10 +859,10 @@ def compute_overview(db: Session) -> OverviewResponse:
     ]
     service_states = {service.name: service for service in services}
 
-    def _default_overview(name: str, stype: str, default_healthy: bool = False,
+    def _default_overview(name: str, service_type: str, default_healthy: bool = False,
                           detail: str = "service not registered") -> ServiceOverview:
         return ServiceOverview(
-            id=0, name=name, service_type=stype, environment=APP_ENVIRONMENT,
+            id=0, name=name, service_type=service_type, environment=APP_ENVIRONMENT,
             status="unknown", url=None, health_endpoint=None, owner=None,
             healthy=default_healthy, detail=detail,
         )
