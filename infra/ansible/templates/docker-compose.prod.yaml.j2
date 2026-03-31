@@ -157,6 +157,18 @@ services:
     networks:
       - app_network
 
+  node-exporter:
+    image: prom/node-exporter:v1.7.0
+    container_name: node_exporter_prod
+    restart: unless-stopped
+    command:
+      - "--path.rootfs=/host"
+    volumes:
+      - /:/host:ro,rslave
+    pid: host
+    networks:
+      - app_network
+
 volumes:
   postgres_data:
   prometheus_data:

@@ -172,6 +172,16 @@ services:
     depends_on:
       - prometheus
 
+  node-exporter:
+    image: prom/node-exporter:v1.7.0
+    container_name: node_exporter
+    restart: unless-stopped
+    command:
+      - "--path.rootfs=/host"
+    volumes:
+      - /:/host:ro,rslave
+    pid: host
+
 volumes:
   postgres_data:
   prometheus_data:
