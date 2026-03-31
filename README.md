@@ -14,6 +14,7 @@ Containerized fullstack pet project deployed to an Ubuntu VM with Ansible, Docke
 - CRUD management for projects, services, and incidents, with `/api/incidents` also serving as the operational log for monitor-worker sweeps and service-action events
 - service-aware incident assistant with deterministic runbook guidance and incident autofill
 - monitor-worker demo service that records platform health summaries and state transitions
+- environment-aware service probing so monitor-worker and the overview API only check services that exist in the current environment (e.g. Docker Nginx is skipped in production where host Nginx is used)
 - worker-mediated service actions so the API queues intent and a separate runner executes it
 - GHCR-backed production images for app services
 - Prometheus + Grafana + Node Exporter observability stack with provisioned dashboards and embedded live metrics
@@ -388,6 +389,7 @@ Required GitHub secrets:
 - frontend navigation is shared from `apps/devops-platform/frontend/shared-nav.js` and rendered by both `index.html` and `resume/index.html`
 - Postgres data lives in a named volume and is preserved across deploys
 - Schema and release-bound data changes should be done through Alembic migrations
+- services have an `environment` field (`dev`, `production`, or `all`); the overview API and monitor-worker only probe services whose environment matches the runtime `ENVIRONMENT` or is `all`
 - dev startup runs `alembic upgrade head` inside the backend container; that is convenient for single-instance local work, while prod uses a separate one-shot migration step
 - Production deploys must use immutable SHA image tags; the deploy workflow rejects `main` as an image tag
 - SSL is live on `kydyrov.dev` with Let's Encrypt certificates issued via `bootstrap.yml`
