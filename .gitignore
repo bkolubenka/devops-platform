@@ -3,3 +3,4 @@ __pycache__/
 .codex
 .env
 .env.local
+.venv
