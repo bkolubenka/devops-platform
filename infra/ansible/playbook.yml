@@ -193,20 +193,6 @@
         proto: tcp
       when: deploy_env == 'prod'
 
-    - name: Allow Grafana through UFW
-      ufw:
-        rule: allow
-        port: '3000'
-        proto: tcp
-      when: deploy_env == 'prod'
-
-    - name: Allow Prometheus through UFW
-      ufw:
-        rule: allow
-        port: '9090'
-        proto: tcp
-      when: deploy_env == 'prod'
-
     - name: Enable UFW
       ufw:
         state: enabled

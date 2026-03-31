@@ -36,7 +36,9 @@ Docker Compose
 Nginx (HTTPS on prod)
   ├─ /        -> frontend
   ├─ /api/*   -> FastAPI backend
-  └─ /health  -> backend health check
+  ├─ /health  -> backend health check
+  ├─ /grafana/ -> Grafana UI (proxied)
+  └─ /prometheus/ -> Prometheus UI (proxied)
 ```
 
 - `monitor-worker` is a separate demo worker container that records operational log sweeps into the incident log.
@@ -70,6 +72,9 @@ app/
     Dockerfile
   frontend/
     index.html
+    shared-nav.js
+    resume/
+      index.html
     Dockerfile
   nginx/
     dev.conf
@@ -130,6 +135,8 @@ Then open:
 - `http://localhost/`
 - `http://localhost/health`
 - `http://localhost/api/portfolio/projects`
+- `http://localhost/grafana/`
+- `http://localhost/prometheus/`
 
 ## Tests
 
@@ -153,6 +160,20 @@ Environment variables:
 - `OLLAMA_TIMEOUT_SECONDS=8` (default, clamped to 1..30)
 
 If Ollama is unavailable or returns invalid output, the API automatically falls back to the deterministic runbook response.
+
+## Observability
+
+- Backend exposes Prometheus metrics at `/metrics`.
+- `monitor-worker` exposes probe metrics at `:9000/metrics`.
+- Prometheus scrapes backend and monitor-worker every 30 seconds.
+- Grafana dashboards and datasource are provisioned from `infra/monitoring/grafana/`.
+
+Production access:
+
+- `https://kydyrov.dev/grafana/`
+- `https://kydyrov.dev/prometheus/`
+
+Both are routed through Nginx on 443; production does not require exposing 3000/9090 publicly.
 
 ## VM Deploy
 
@@ -232,6 +253,7 @@ Required GitHub secrets:
 
 - `docker-compose.dev.yaml` is the active working environment
 - `docker-compose.prod.yaml` is registry-backed for backend, frontend, monitor-worker, and the hidden action-runner
+- frontend navigation is shared from `app/frontend/shared-nav.js` and rendered by both `app/frontend/index.html` and `app/frontend/resume/index.html`
 - Postgres data lives in a named volume and is preserved across deploys
 - Schema and release-bound data changes should be done through Alembic migrations
 - dev startup runs `alembic upgrade head` inside the backend container; that is convenient for single-instance local work, while prod uses a separate one-shot migration step
