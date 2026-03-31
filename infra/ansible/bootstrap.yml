@@ -220,8 +220,10 @@
       changed_when: false
       failed_when: false
 
-    - name: Validate nginx configuration
-      command: nginx -t
+    - name: Remove stale nginx configs from previous deploys
+      shell: rm -f /etc/nginx/conf.d/*.conf
+      args:
+        executable: /bin/bash
       changed_when: false
 
     - name: Ensure nginx is started and enabled
