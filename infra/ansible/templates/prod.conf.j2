@@ -1,12 +1,25 @@
+upstream app_backend {
+    server 127.0.0.1:8000;
+}
+
+upstream app_frontend {
+    server 127.0.0.1:8080;
+}
+
+upstream app_grafana {
+    server 127.0.0.1:3000;
+}
+
+upstream app_prometheus {
+    server 127.0.0.1:9090;
+}
+
 server {
     listen 80;
     server_name {{ domain_name }} {{ domain_www }} {{ test_domain }};
 
-    resolver 127.0.0.11 ipv6=off valid=30s;
-    set $backend_upstream backend;
-
     location = /health {
-        proxy_pass http://$backend_upstream:8000/health;
+        proxy_pass http://app_backend/health;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -24,8 +37,8 @@ server {
     http2 on;
     server_name {{ domain_www }};
 
-    ssl_certificate /etc/ssl/certs/fullchain.pem;
-    ssl_certificate_key /etc/ssl/certs/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/{{ domain_name }}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/{{ domain_name }}/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384;
     ssl_prefer_server_ciphers off;
@@ -38,14 +51,8 @@ server {
     http2 on;
     server_name {{ domain_name }} {{ test_domain }};
 
-    resolver 127.0.0.11 ipv6=off valid=30s;
-    set $backend_upstream backend;
-    set $frontend_upstream frontend;
-    set $grafana_upstream grafana;
-    set $prometheus_upstream prometheus;
-
-    ssl_certificate /etc/ssl/certs/fullchain.pem;
-    ssl_certificate_key /etc/ssl/certs/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/{{ domain_name }}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/{{ domain_name }}/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384;
     ssl_prefer_server_ciphers off;
@@ -57,7 +64,7 @@ server {
     add_header Content-Security-Policy "default-src 'self' http: https: data: blob: 'unsafe-inline'" always;
 
     location /api/ {
-        proxy_pass http://$backend_upstream:8000;
+        proxy_pass http://app_backend;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -70,7 +77,7 @@ server {
     }
 
     location = /health {
-        proxy_pass http://$backend_upstream:8000/health;
+        proxy_pass http://app_backend/health;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -79,7 +86,7 @@ server {
     }
 
     location /grafana/ {
-        proxy_pass http://$grafana_upstream:3000;
+        proxy_pass http://app_grafana;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -99,7 +106,7 @@ server {
     }
 
     location /prometheus/ {
-        proxy_pass http://$prometheus_upstream:9090;
+        proxy_pass http://app_prometheus;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -108,7 +115,7 @@ server {
     }
 
     location / {
-        proxy_pass http://$frontend_upstream:80;
+        proxy_pass http://app_frontend;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
