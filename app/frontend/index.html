@@ -281,6 +281,83 @@
         }
       }
 
+      @media (max-width: 600px) {
+        .nav-shell {
+          flex-direction: column;
+          gap: 10px;
+          padding: 12px 0;
+        }
+
+        .brand {
+          font-size: 1.4rem;
+        }
+
+        .nav-links {
+          gap: 6px;
+          justify-content: center;
+        }
+
+        .nav-link {
+          padding: 8px 10px;
+          font-size: 0.88rem;
+        }
+
+        .page-shell {
+          padding: 20px 0 32px;
+        }
+
+        main {
+          padding: 16px;
+          border-radius: 18px;
+        }
+
+        h1 {
+          font-size: clamp(1.8rem, 7vw, 5.2rem);
+        }
+
+        h2 {
+          font-size: 1.35rem;
+        }
+
+        .summary-grid {
+          grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        }
+
+        .grid {
+          grid-template-columns: 1fr;
+        }
+
+        .card,
+        .panel {
+          padding: 14px;
+          border-radius: 14px;
+        }
+
+        .metric {
+          font-size: 1.5rem;
+        }
+
+        .detail-item {
+          flex-direction: column;
+          gap: 2px;
+        }
+
+        .muted-row {
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .ai-output {
+          min-height: 80px;
+          padding: 12px;
+        }
+
+        button {
+          padding: 10px 14px;
+          font-size: 0.92rem;
+        }
+      }
+
       form {
         display: grid;
         gap: 12px;
