@@ -449,6 +449,14 @@
         chdir: "{{ app_dir }}"
       when: deploy_env == 'dev'
 
+    - name: Authenticate Docker with GHCR for production image pulls
+      shell: echo "{{ ghcr_token }}" | docker login ghcr.io -u "{{ ghcr_owner }}" --password-stdin
+      no_log: true
+      changed_when: false
+      when:
+        - deploy_env == 'prod'
+        - ghcr_token | length > 0
+
     - name: Verify production image tags exist in GHCR
       shell: docker manifest inspect ghcr.io/{{ ghcr_owner }}/devops-platform-{{ item }}:{{ effective_image_tag }} >/dev/null
       args:

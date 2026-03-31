@@ -19,6 +19,7 @@ rollback_to_previous: "{{ lookup('env', 'DEPLOY_ROLLBACK_TO_PREVIOUS') | default
 db_user: "{{ lookup('env', 'DEPLOY_DB_USER') | default('devops_user', true) }}"
 db_password: "{{ lookup('env', 'DEPLOY_DB_PASSWORD') | default('devops_password', true) }}"
 secret_key: "{{ lookup('env', 'DEPLOY_SECRET_KEY') | default('change-me', true) }}"
+ghcr_token: "{{ lookup('env', 'DEPLOY_GHCR_TOKEN') | default('', true) }}"
 
 # Environment-specific settings
 deploy_env: "{{ lookup('env', 'DEPLOY_ENV') | default('dev', true) }}"
