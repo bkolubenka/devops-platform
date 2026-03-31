@@ -100,6 +100,12 @@
         path: /etc/nginx/sites-enabled/default
         state: absent
 
+    - name: Ensure nginx snippets directory exists
+      file:
+        path: /etc/nginx/snippets
+        state: directory
+        mode: "0755"
+
     - name: Check for existing letsencrypt certificate
       stat:
         path: "/etc/letsencrypt/live/{{ domain_name }}/fullchain.pem"
