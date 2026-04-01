@@ -3,7 +3,7 @@
 [![CI](https://github.com/bkolubenka/devops-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/bkolubenka/devops-platform/actions/workflows/ci.yml)
 [![Deploy](https://github.com/bkolubenka/devops-platform/actions/workflows/deploy.yml/badge.svg)](https://github.com/bkolubenka/devops-platform/actions/workflows/deploy.yml)
 
-Containerized fullstack pet project deployed to an Ubuntu VM with Ansible, Docker Compose, Nginx, PostgreSQL, and GitHub Actions.
+Containerized full-stack DevOps platform deployed on an Ubuntu VPS, integrating CI/CD, observability, and operational workflows using Ansible, Docker Compose, Nginx, PostgreSQL, and GitHub Actions.
 
 ## What This Project Shows
 
