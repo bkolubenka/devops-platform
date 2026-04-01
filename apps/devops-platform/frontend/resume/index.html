@@ -425,27 +425,28 @@
         const footer = document.getElementById("build-footer");
         const footerSummary = document.getElementById("build-footer-summary");
         try {
-          const response = await fetch("/api/health");
+          const response = await fetch("/api/overview");
           if (response.ok) {
             const data = await response.json();
-            footerSummary.textContent = `App: ${data.app_version || 'unknown'} | Image: ${data.image_tag || 'unknown'} | Build: ${data.build_id || 'unknown'}`;
+            const build = data.build || {};
+            footerSummary.textContent = `App: ${build.app_version || 'unknown'} | Image: ${build.image_tag || 'unknown'} | Build: ${build.build_id || 'unknown'}`;
             footer.innerHTML = `
               <div class="grid">
                 <div class="panel">
                   <div class="label">Application</div>
-                  <div class="metric">${data.app_version || 'unknown'}</div>
+                  <div class="metric">${build.app_version || 'unknown'}</div>
                 </div>
                 <div class="panel">
                   <div class="label">Image Tag</div>
-                  <div class="metric">${data.image_tag || 'unknown'}</div>
+                  <div class="metric">${build.image_tag || 'unknown'}</div>
                 </div>
                 <div class="panel">
                   <div class="label">Build ID</div>
-                  <div class="metric">${data.build_id || 'unknown'}</div>
+                  <div class="metric">${build.build_id || 'unknown'}</div>
                 </div>
                 <div class="panel">
                   <div class="label">Deployed</div>
-                  <div class="metric">${new Date(data.deployed_at || Date.now()).toLocaleString()}</div>
+                  <div class="metric">${build.build_date && build.build_date !== 'unknown' ? new Date(build.build_date).toLocaleString() : 'unknown'}</div>
                 </div>
               </div>
             `;
