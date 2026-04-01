@@ -200,6 +200,8 @@ Before deploying to production, configure these GitHub repository secrets:
 # 2. Deploy:   Go to Actions → Deploy → Run workflow (select prod, provide SHA tag)
 ```
 
+Both manual workflows now accept an optional `ref` input so you can run them against a feature branch or tag; if you leave it blank, GitHub uses the workflow's selected branch. Bootstrap also exposes `deploy_env` and defaults to `prod`.
+
 See [Infrastructure: Bootstrap vs Deploy](#infrastructure-bootstrap-vs-deploy) for manual commands.
 
 ## Incident Assistant (Optional Ollama)
