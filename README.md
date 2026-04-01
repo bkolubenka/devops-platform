@@ -200,7 +200,7 @@ Before deploying to production, configure these GitHub repository secrets:
 # 2. Deploy:   Go to Actions → Deploy → Run workflow (select prod, provide SHA tag)
 ```
 
-Both manual workflows now accept an optional `ref` input so you can run them against a feature branch or tag; if you leave it blank, GitHub uses the workflow's selected branch. Bootstrap also exposes `deploy_env` and defaults to `prod`.
+Both manual workflows use GitHub's built-in branch selector, so you can run them from a feature branch or tag without an extra `ref` field. Bootstrap also exposes `deploy_env` and defaults to `prod`.
 
 See [Infrastructure: Bootstrap vs Deploy](#infrastructure-bootstrap-vs-deploy) for manual commands.
 
@@ -357,6 +357,16 @@ Deploy details:
 - pulls GHCR app images for prod and deploys them without destructive `down/prune` steps
 - records `current_release.env` and `previous_release.env` on the server for rollback metadata
 - See [.github/RUNNER_SETUP.md](.github/RUNNER_SETUP.md) for runner registration and labeling instructions
+
+Home VM DDNS:
+
+- `local.kydyrov.dev` is intended to point to the home VM, not the VPS.
+- The updater lives in [infra/ddns/cloudflare_ddns.py](infra/ddns/cloudflare_ddns.py) and uses only the Python standard library.
+- Install it on the home VM with [infra/ansible/ddns.yml](infra/ansible/ddns.yml) using `ansible-playbook -i localhost, -c local infra/ansible/ddns.yml`.
+- The Ansible playbook places the script under `/usr/local/lib/devops-platform-ddns/`, installs the systemd timer, renders `/etc/default/cloudflare-ddns`, and starts the updater once immediately.
+- The shell installer [infra/ddns/install-cloudflare-ddns.sh](infra/ddns/install-cloudflare-ddns.sh) is still available as a fallback.
+- Configure `/etc/default/cloudflare-ddns` from [infra/ddns/cloudflare-ddns.env.example](infra/ddns/cloudflare-ddns.env.example) with your Cloudflare API token, zone name, and record name.
+- The timer updates the Cloudflare A record whenever the home WAN IPv4 changes.
 
 Branch policy:
 

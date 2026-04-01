@@ -1,0 +1,9 @@
+[Unit]
+Description=Cloudflare DDNS updater for local.kydyrov.dev
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/default/cloudflare-ddns
+ExecStart=/usr/bin/python3 /usr/local/lib/devops-platform-ddns/cloudflare_ddns.py
