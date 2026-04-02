@@ -1015,6 +1015,25 @@
         );
       }
 
+      function renderEnvironmentCard(environmentName, currentEnvironmentName, platformOnline) {
+        const environment = getEnvironmentLink(environmentName);
+        const isCurrent = currentEnvironmentName === environmentName;
+        const title = environmentName === "production" ? "Production" : "Development";
+        const statusText = isCurrent ? "Current" : "Separate";
+        const availabilityText = platformOnline ? (isCurrent ? "Open current environment" : "Open alternate environment") : "Unavailable while platform is offline";
+
+        return `
+          <article class="card ${platformOnline ? "" : "card-disabled"}">
+            <div class="label">${title}</div>
+            <div class="metric ${platformOnline ? (isCurrent ? "ok" : "") : "bad"}">${statusText}</div>
+            <p class="metric-meta">${isCurrent ? "Current application profile returned by the API." : "Separate public entrypoint for the alternate environment."}</p>
+            <div class="env-actions">
+              ${platformOnline ? `<a class="env-button env-button-active" href="${environment.href}">${availabilityText}</a>` : `<span class="env-button env-button-disabled">${availabilityText}</span>`}
+            </div>
+          </article>
+        `;
+      }
+
       function actionClass(action) {
         if (action === "restart") return "btn-primary";
         if (action === "start") return "btn-secondary";
@@ -1140,11 +1159,6 @@
           const data = await apiRequest("/api/overview");
           const environmentLabel = inferEnvironmentLabel(data.environment);
           const platformOnline = isPlatformOnline(data);
-          const currentEnvironment = getEnvironmentLink(environmentLabel);
-          const alternateEnvironment =
-            environmentLabel === "development"
-              ? getEnvironmentLink("production")
-              : getEnvironmentLink("development");
 
           metrics.innerHTML = `
             <article class="card">
@@ -1172,17 +1186,8 @@
               <div class="metric">${data.service_count}</div>
               <p class="metric-meta">${data.healthy_service_count} healthy service targets.</p>
             </article>
-            <article class="card ${platformOnline ? "" : "card-disabled"}">
-              <div class="label">Environment</div>
-              <div class="env-card">
-                <div class="metric ${platformOnline ? "ok" : "bad"}">${environmentLabel}</div>
-                <p class="metric-meta">${platformOnline ? "Platform online. Switch between prod and dev." : "Platform offline. Environment buttons are disabled until the edge and backend recover."}</p>
-                <div class="env-actions">
-                  <span class="env-button env-button-current">${currentEnvironment.label}</span>
-                  ${platformOnline ? `<a class="env-button env-button-active" href="${alternateEnvironment.href}">${alternateEnvironment.label}</a>` : `<span class="env-button env-button-disabled">${alternateEnvironment.label}</span>`}
-                </div>
-              </div>
-            </article>
+            ${renderEnvironmentCard("production", environmentLabel, platformOnline)}
+            ${renderEnvironmentCard("development", environmentLabel, platformOnline)}
           `;
 
           const componentMarkup = Object.entries(data.build.component_versions || {})
