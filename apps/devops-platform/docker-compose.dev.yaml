@@ -24,6 +24,8 @@ services:
     container_name: backend
     restart: unless-stopped
     command: sh -c "alembic -c backend/alembic.ini upgrade head && uvicorn backend.main:app --host 0.0.0.0 --port 8000"
+    ports:
+      - "127.0.0.1:8000:8000"
     expose:
       - "8000"
     environment:
@@ -55,6 +57,8 @@ services:
       dockerfile: frontend/Dockerfile
     container_name: frontend
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:80"
     expose:
       - "80"
     depends_on:
@@ -141,6 +145,8 @@ services:
       - "--web.route-prefix=/prometheus/"
     expose:
       - "9090"
+    ports:
+      - "127.0.0.1:9090:9090"
     volumes:
       - ../../infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
@@ -152,6 +158,8 @@ services:
     image: grafana/grafana:10.4.3
     container_name: grafana
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
     expose:
       - "3000"
     environment:
