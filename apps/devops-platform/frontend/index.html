@@ -991,17 +991,27 @@
         );
       }
 
-      function renderEnvironmentCard(environmentName, platformOnline) {
+      function renderEnvironmentCard(environmentName, currentEnvironmentName, platformOnline) {
         const environment = getEnvironmentLink(environmentName);
         const title = environmentName === "production" ? "Production" : "Development";
+
+        if (currentEnvironmentName === environmentName) {
+          return `
+            <article class="card">
+              <div class="label">Environment</div>
+              <div class="metric">${environment.label === "prod" ? "production" : "development"}</div>
+              <p class="metric-meta">Current application profile returned by the API.</p>
+            </article>
+          `;
+        }
+
         const statusText = platformOnline ? "Online" : "Offline";
-        const cardClass = platformOnline ? "card env-card-link" : "card card-disabled";
-        const bodyClass = platformOnline ? "env-card-status env-card-status-online" : "env-card-status env-card-status-offline";
+        const statusClassName = platformOnline ? "env-card-status env-card-status-online" : "env-card-status env-card-status-offline";
 
         return `
-          ${platformOnline ? `<a class="${cardClass}" href="${environment.href}">` : `<article class="${cardClass}">`}
+          ${platformOnline ? `<a class="card env-card-link" href="${environment.href}">` : `<article class="card card-disabled">`}
             <div class="label">${title}</div>
-            <div class="metric ${bodyClass}">${statusText}</div>
+            <div class="metric ${statusClassName}">${statusText}</div>
             <p class="metric-meta">${platformOnline ? "Open the public entrypoint for this environment." : "This environment is unavailable until the platform recovers."}</p>
           ${platformOnline ? `</a>` : `</article>`}
         `;
@@ -1159,8 +1169,8 @@
               <div class="metric">${data.service_count}</div>
               <p class="metric-meta">${data.healthy_service_count} healthy service targets.</p>
             </article>
-            ${renderEnvironmentCard("production", platformOnline)}
-            ${renderEnvironmentCard("development", platformOnline)}
+            ${renderEnvironmentCard("production", environmentLabel, platformOnline)}
+            ${renderEnvironmentCard("development", environmentLabel, platformOnline)}
           `;
 
           const componentMarkup = Object.entries(data.build.component_versions || {})
