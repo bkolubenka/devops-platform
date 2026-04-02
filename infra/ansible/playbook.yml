@@ -391,10 +391,30 @@
         CONTAINER_REGISTRY: "{{ effective_container_registry }}"
       when: deploy_env == 'dev'
 
-    - name: Restart dev nginx to refresh upstream targets
-      command: docker compose --env-file .env.dev -f {{ compose_file }} restart nginx
-      args:
-        chdir: "{{ app_compose_dir }}"
+    - name: Wait for dev backend port
+      wait_for:
+        host: 127.0.0.1
+        port: 8000
+        timeout: 90
+      when: deploy_env == 'dev'
+
+    - name: Wait for dev frontend port
+      wait_for:
+        host: 127.0.0.1
+        port: 8080
+        timeout: 90
+      when: deploy_env == 'dev'
+
+    - name: Verify dev backend health endpoint before host edge validation
+      uri:
+        url: http://127.0.0.1:8000/health
+        method: GET
+        status_code: 200
+      register: dev_backend_health
+      retries: 15
+      delay: 4
+      until: dev_backend_health is not failed and (dev_backend_health.json is defined) and (dev_backend_health.json.status | default('') == "ok")
+      changed_when: false
       when: deploy_env == 'dev'
 
     - name: Validate dev host nginx configuration
