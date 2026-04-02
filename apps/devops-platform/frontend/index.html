@@ -176,6 +176,79 @@
         padding: 18px;
       }
 
+      .card-link {
+        display: block;
+        color: inherit;
+        text-decoration: none;
+        transition:
+          transform 0.18s ease,
+          box-shadow 0.18s ease,
+          border-color 0.18s ease;
+      }
+
+      .card-link:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 18px 32px rgba(29, 37, 51, 0.08);
+        border-color: rgba(191, 90, 29, 0.22);
+      }
+
+      .card-disabled {
+        opacity: 0.68;
+      }
+
+      .env-card {
+        display: grid;
+        gap: 12px;
+      }
+
+      .env-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .env-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 92px;
+        padding: 10px 14px;
+        border-radius: 999px;
+        border: 1px solid transparent;
+        text-decoration: none;
+        font-weight: 700;
+        transition:
+          transform 0.18s ease,
+          box-shadow 0.18s ease,
+          opacity 0.18s ease,
+          border-color 0.18s ease,
+          background 0.18s ease;
+      }
+
+      .env-button:hover {
+        transform: translateY(-1px);
+      }
+
+      .env-button-current {
+        color: var(--accent);
+        background: var(--accent-soft);
+        border-color: rgba(191, 90, 29, 0.16);
+      }
+
+      .env-button-active {
+        color: #fffaf2;
+        background: var(--accent);
+        box-shadow: 0 12px 24px rgba(191, 90, 29, 0.18);
+      }
+
+      .env-button-disabled {
+        color: var(--muted);
+        background: rgba(92, 102, 119, 0.08);
+        border-color: rgba(92, 102, 119, 0.12);
+        cursor: not-allowed;
+        pointer-events: none;
+      }
+
       .card-title {
         margin: 0 0 8px;
         font-size: 1.15rem;
@@ -919,6 +992,48 @@
         return "bad";
       }
 
+      function inferEnvironmentLabel(apiEnvironment) {
+        const hostname = window.location.hostname;
+        if (hostname === "local.kydyrov.dev") return "development";
+        if (hostname === "kydyrov.dev" || hostname === "www.kydyrov.dev") return "production";
+        return apiEnvironment || "unknown";
+      }
+
+      function getEnvironmentLink(environmentName) {
+        if (environmentName === "development") {
+          return { label: "dev", href: "https://local.kydyrov.dev/" };
+        }
+        if (environmentName === "production") {
+          return { label: "prod", href: "https://kydyrov.dev/" };
+        }
+        return { label: environmentName || "unknown", href: "/" };
+      }
+
+      function isPlatformOnline(data) {
+        return [data.backend_status, data.database_status, data.frontend_status, data.nginx_status].every(
+          (value) => value === "ok"
+        );
+      }
+
+      function renderEnvironmentCard(environmentName, currentEnvironmentName, platformOnline) {
+        const environment = getEnvironmentLink(environmentName);
+        const isCurrent = currentEnvironmentName === environmentName;
+        const title = environmentName === "production" ? "Production" : "Development";
+        const statusText = isCurrent ? "Current" : "Separate";
+        const availabilityText = platformOnline ? (isCurrent ? "Open current environment" : "Open alternate environment") : "Unavailable while platform is offline";
+
+        return `
+          <article class="card ${platformOnline ? "" : "card-disabled"}">
+            <div class="label">${title}</div>
+            <div class="metric ${platformOnline ? (isCurrent ? "ok" : "") : "bad"}">${statusText}</div>
+            <p class="metric-meta">${isCurrent ? "Current application profile returned by the API." : "Separate public entrypoint for the alternate environment."}</p>
+            <div class="env-actions">
+              ${platformOnline ? `<a class="env-button env-button-active" href="${environment.href}">${availabilityText}</a>` : `<span class="env-button env-button-disabled">${availabilityText}</span>`}
+            </div>
+          </article>
+        `;
+      }
+
       function actionClass(action) {
         if (action === "restart") return "btn-primary";
         if (action === "start") return "btn-secondary";
@@ -1042,6 +1157,8 @@
 
         try {
           const data = await apiRequest("/api/overview");
+          const environmentLabel = inferEnvironmentLabel(data.environment);
+          const platformOnline = isPlatformOnline(data);
 
           metrics.innerHTML = `
             <article class="card">
@@ -1069,11 +1186,8 @@
               <div class="metric">${data.service_count}</div>
               <p class="metric-meta">${data.healthy_service_count} healthy service targets.</p>
             </article>
-            <article class="card">
-              <div class="label">Environment</div>
-              <div class="metric">${data.environment}</div>
-              <p class="metric-meta">Current application profile returned by the API.</p>
-            </article>
+            ${renderEnvironmentCard("production", environmentLabel, platformOnline)}
+            ${renderEnvironmentCard("development", environmentLabel, platformOnline)}
           `;
 
           const componentMarkup = Object.entries(data.build.component_versions || {})
