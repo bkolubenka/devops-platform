@@ -397,6 +397,25 @@
         chdir: "{{ app_compose_dir }}"
       when: deploy_env == 'dev'
 
+    - name: Wait for dev nginx upstream port
+      wait_for:
+        host: 127.0.0.1
+        port: 8081
+        timeout: 90
+      when: deploy_env == 'dev'
+
+    - name: Verify dev nginx health endpoint before host edge validation
+      uri:
+        url: http://127.0.0.1:8081/health
+        method: GET
+        status_code: 200
+      register: dev_nginx_health
+      retries: 15
+      delay: 4
+      until: dev_nginx_health is not failed and (dev_nginx_health.json is defined) and (dev_nginx_health.json.status | default('') == "ok")
+      changed_when: false
+      when: deploy_env == 'dev'
+
     - name: Validate dev host nginx configuration
       command: nginx -t
       changed_when: false
