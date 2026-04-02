@@ -52,3 +52,4 @@ allow_http01_fallback: "{{ lookup('env', 'DEPLOY_ALLOW_HTTP01_FALLBACK') | defau
 # Test environment settings
 domain_www: "www.{{ domain_name }}"
 test_domain: "{{ domain_www }}"
+local_domain: "{{ lookup('env', 'DEPLOY_LOCAL_DOMAIN') | default('local.' + domain_name, true) }}"

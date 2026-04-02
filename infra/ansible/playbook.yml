@@ -10,7 +10,11 @@
       - docker-compose-plugin
     dev_packages:
       - git
+      - nginx
+      - certbot
+      - python3-certbot-dns-cloudflare
     prod_packages: []
+    cf_api_token: "{{ lookup('env', 'DEPLOY_CF_API_TOKEN') | default(lookup('env', 'CF_API_TOKEN'), true) | default('', true) }}"
 
   tasks:
     - name: Validate deploy environment
@@ -67,20 +71,17 @@
     - name: Gather service facts
       service_facts:
 
-    - name: Stop system nginx on dev (Docker nginx handles traffic)
-      service:
-        name: nginx
-        state: stopped
-        enabled: false
-      when:
-        - deploy_env == 'dev'
-        - "'nginx.service' in ansible_facts.services"
-
     - name: Remove default nginx site on prod
       file:
         path: /etc/nginx/sites-enabled/default
         state: absent
       when: deploy_env == 'prod'
+
+    - name: Remove default nginx site on dev host edge
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      when: deploy_env == 'dev'
 
     - name: Set default effective release metadata
       set_fact:
@@ -238,6 +239,77 @@
         update: true
       when: deploy_env == 'dev'
 
+    - name: Check for dev letsencrypt SSL certificate
+      stat:
+        path: "/etc/letsencrypt/live/{{ local_domain }}/fullchain.pem"
+      register: dev_certificate_stat
+      when: deploy_env == 'dev'
+
+    - name: Check for dev letsencrypt SSL private key
+      stat:
+        path: "/etc/letsencrypt/live/{{ local_domain }}/privkey.pem"
+      register: dev_private_key_stat
+      when: deploy_env == 'dev'
+
+    - name: Fail when dev SSL certificates are missing and no Cloudflare token is provided
+      fail:
+        msg: >-
+          SSL certificates for {{ local_domain }} are missing.
+          Set DEPLOY_CF_API_TOKEN (or CF_API_TOKEN) so certbot can issue them via Cloudflare DNS-01.
+      when:
+        - deploy_env == 'dev'
+        - not (dev_certificate_stat.stat.exists | default(false)) or not (dev_private_key_stat.stat.exists | default(false))
+        - cf_api_token | length == 0
+
+    - name: Write Cloudflare DNS credentials file for dev certbot
+      copy:
+        dest: /etc/letsencrypt/cloudflare.ini
+        content: "dns_cloudflare_api_token = {{ cf_api_token }}\n"
+        mode: "0600"
+      when:
+        - deploy_env == 'dev'
+        - cf_api_token | length > 0
+
+    - name: Obtain dev SSL certificate via Cloudflare DNS-01 challenge
+      command: >-
+        certbot certonly
+        --dns-cloudflare
+        --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini
+        --dns-cloudflare-propagation-seconds 30
+        --agree-tos --email {{ ssl_email }}
+        --expand
+        -d {{ local_domain }}
+        --non-interactive
+      register: dev_certbot_dns_result
+      when:
+        - deploy_env == 'dev'
+        - cf_api_token | length > 0
+        - not (dev_certificate_stat.stat.exists | default(false)) or not (dev_private_key_stat.stat.exists | default(false))
+
+    - name: Fail with dev certbot diagnostics
+      fail:
+        msg: >-
+          Dev SSL certificate issuance failed for {{ local_domain }}.
+          Certbot stderr: {{ dev_certbot_dns_result.stderr | default('unavailable') }}
+      when:
+        - deploy_env == 'dev'
+        - dev_certbot_dns_result is defined
+        - dev_certbot_dns_result.rc | default(0) != 0
+
+    - name: Render dev host nginx config
+      template:
+        src: local-dev.conf.j2
+        dest: "/etc/nginx/conf.d/{{ local_domain }}.conf"
+        mode: "0644"
+      when: deploy_env == 'dev'
+
+    - name: Render shared SSL params snippet for dev host nginx
+      template:
+        src: ssl-params.conf.j2
+        dest: /etc/nginx/snippets/ssl-params.conf
+        mode: "0644"
+      when: deploy_env == 'dev'
+
     - name: Render prod runtime compose file
       template:
         src: docker-compose.prod.yaml.j2
@@ -325,6 +397,45 @@
         chdir: "{{ app_compose_dir }}"
       when: deploy_env == 'dev'
 
+    - name: Validate dev host nginx configuration
+      command: nginx -t
+      changed_when: false
+      when: deploy_env == 'dev'
+
+    - name: Ensure dev host nginx is started and enabled
+      service:
+        name: nginx
+        state: started
+        enabled: true
+      when: deploy_env == 'dev'
+
+    - name: Reload dev host nginx
+      service:
+        name: nginx
+        state: reloaded
+      when: deploy_env == 'dev'
+
+    - name: Wait for dev host nginx port
+      wait_for:
+        host: 127.0.0.1
+        port: 443
+        timeout: 90
+      when: deploy_env == 'dev'
+
+    - name: Verify dev HTTPS endpoint via host nginx
+      shell: >-
+        curl --fail --silent --show-error
+        --resolve {{ local_domain }}:443:127.0.0.1
+        https://{{ local_domain }}/health
+      args:
+        executable: /bin/bash
+      register: dev_https_health
+      retries: 15
+      delay: 4
+      until: dev_https_health is not failed
+      changed_when: false
+      when: deploy_env == 'dev'
+
     - name: Authenticate Docker with GHCR for production image pulls
       shell: echo "{{ ghcr_token }}" | docker login ghcr.io -u "{{ ghcr_owner }}" --password-stdin
       no_log: true
@@ -389,13 +500,17 @@
     - name: Validate nginx configuration
       command: nginx -t
       changed_when: false
-      when: deploy_env == 'prod'
+      when: deploy_env in ['dev', 'prod']
 
     - name: Reload nginx to pick up new configuration
       service:
         name: nginx
         state: reloaded
-      when: deploy_env == 'prod'
+      when: deploy_env in ['dev', 'prod']
+
+    - name: Set effective healthcheck URL
+      set_fact:
+        effective_healthcheck_url: "{{ 'https://' + local_domain + '/health' if deploy_env == 'dev' else healthcheck_url }}"
 
     - name: Wait for nginx port
       wait_for:
@@ -405,7 +520,7 @@
 
     - name: Verify backend health endpoint via nginx
       uri:
-        url: "{{ healthcheck_url }}"
+        url: "{{ effective_healthcheck_url }}"
         method: GET
         status_code: 200
       register: backend_health

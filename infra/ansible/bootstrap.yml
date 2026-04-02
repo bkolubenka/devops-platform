@@ -116,9 +116,19 @@
         path: "/etc/letsencrypt/live/{{ domain_name }}/privkey.pem"
       register: existing_key
 
+    - name: Check if existing certificate covers local_domain SAN
+      shell: >-
+        openssl x509 -noout -text
+        -in "/etc/letsencrypt/live/{{ domain_name }}/fullchain.pem"
+        | grep -qF "{{ local_domain }}"
+      register: local_domain_in_cert
+      changed_when: false
+      failed_when: false
+      when: existing_cert.stat.exists and existing_key.stat.exists
+
     - name: Set SSL issuance flag
       set_fact:
-        ssl_needs_issue: "{{ not (existing_cert.stat.exists and existing_key.stat.exists) }}"
+        ssl_needs_issue: "{{ not (existing_cert.stat.exists and existing_key.stat.exists) or (local_domain_in_cert is defined and local_domain_in_cert.rc | default(0) != 0) }}"
 
     - name: Debug SSL status
       debug:
@@ -154,7 +164,8 @@
         --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini
         --dns-cloudflare-propagation-seconds 30
         --agree-tos --email {{ ssl_email }}
-        -d {{ domain_name }} -d {{ domain_www }}
+        --expand
+        -d {{ domain_name }} -d {{ domain_www }} -d {{ local_domain }}
         --non-interactive
       register: certbot_dns_result
       when:
@@ -174,7 +185,8 @@
       command: >-
         certbot certonly --standalone
         --agree-tos --email {{ ssl_email }}
-        -d {{ domain_name }} -d {{ domain_www }}
+        --expand
+        -d {{ domain_name }} -d {{ domain_www }} -d {{ local_domain }}
         --non-interactive
       register: certbot_standalone_result
       failed_when: false
