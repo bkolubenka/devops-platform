@@ -1,4 +1,5 @@
 name: Deploy
+run-name: Deploy - ${{ inputs.deploy_env }}
 
 on:
   workflow_dispatch:
@@ -36,6 +37,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -99,6 +102,7 @@ jobs:
           DEPLOY_ENV: ${{ inputs.deploy_env }}
           DEPLOY_REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
           DEPLOY_REPO_REF: ${{ github.ref_name }}
+          DEPLOY_CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           DEPLOY_GHCR_OWNER: ${{ github.repository_owner }}
           DEPLOY_IMAGE_TAG: ${{ steps.deploy_meta.outputs.image_tag }}
           DEPLOY_APP_VERSION: 2.1.0

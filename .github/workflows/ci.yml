@@ -52,11 +52,13 @@ jobs:
           import time
           import urllib.request
 
+          base_url = "http://127.0.0.1:8081"
+
           checks = [
-              ("http://127.0.0.1/health", {"status": "ok"}),
-              ("http://127.0.0.1/api/health", {"status": "ok"}),
-              ("http://127.0.0.1/api/overview", None),
-              ("http://127.0.0.1/api/services", None),
+              (f"{base_url}/health", {"status": "ok"}),
+              (f"{base_url}/api/health", {"status": "ok"}),
+              (f"{base_url}/api/overview", None),
+              (f"{base_url}/api/services", None),
           ]
 
           def fetch_json(url: str):
@@ -74,8 +76,8 @@ jobs:
                               assert payload.get(key) == value, (url, payload)
                       results[url] = payload
 
-                  assert "services" in results["http://127.0.0.1/api/overview"]
-                  assert isinstance(results["http://127.0.0.1/api/services"], list)
+                  assert "services" in results[f"{base_url}/api/overview"]
+                  assert isinstance(results[f"{base_url}/api/services"], list)
                   break
               except Exception:
                   if time.time() >= deadline:

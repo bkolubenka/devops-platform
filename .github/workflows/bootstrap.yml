@@ -1,7 +1,17 @@
 name: Bootstrap Infrastructure
+run-name: Bootstrap Infrastructure - ${{ inputs.deploy_env }}
 
 on:
   workflow_dispatch:
+    inputs:
+      deploy_env:
+        description: "Target environment"
+        required: true
+        default: prod
+        type: choice
+        options:
+          - prod
+          - dev
 
 permissions:
   contents: read
@@ -16,6 +26,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -56,9 +68,11 @@ jobs:
         env:
           ANSIBLE_BECOME_PASSWORD: ${{ secrets.BECOME_PASSWORD }}
           DEPLOY_CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          DEPLOY_ENV: ${{ inputs.deploy_env }}
         run: |
           ANSIBLE_LOCAL_TEMP=/tmp/.ansible/tmp \
           ansible-playbook \
           -i infra/ansible/inventory.runner.ini \
           infra/ansible/bootstrap.yml \
-          -e "ansible_become_password=${ANSIBLE_BECOME_PASSWORD}"
+          -e "ansible_become_password=${ANSIBLE_BECOME_PASSWORD}" \
+          -e "deploy_env=${DEPLOY_ENV}"

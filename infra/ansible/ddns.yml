@@ -1,0 +1,62 @@
+- name: Install Cloudflare DDNS updater
+  hosts: all
+  become: true
+
+  vars:
+    ddns_install_dir: /usr/local/lib/devops-platform-ddns
+    ddns_systemd_dir: /etc/systemd/system
+    ddns_env_file: /etc/default/cloudflare-ddns
+    ddns_api_token: "{{ lookup('env', 'DEPLOY_CF_API_TOKEN') | default(lookup('env', 'CF_API_TOKEN'), true) | default('', true) }}"
+
+  tasks:
+    - name: Ensure DDNS API token is provided
+      fail:
+        msg: >-
+          Cloudflare DDNS requires CF_API_TOKEN or DEPLOY_CF_API_TOKEN to be set.
+          Create a token with DNS edit permissions for the kydyrov.dev zone.
+      when: ddns_api_token | length == 0
+
+    - name: Ensure DDNS install directory exists
+      file:
+        path: "{{ ddns_install_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Install DDNS updater script
+      copy:
+        src: "{{ playbook_dir }}/../../infra/ddns/cloudflare_ddns.py"
+        dest: "{{ ddns_install_dir }}/cloudflare_ddns.py"
+        mode: "0755"
+
+    - name: Install DDNS systemd service
+      copy:
+        src: "{{ playbook_dir }}/../../infra/ddns/cloudflare-ddns.service"
+        dest: "{{ ddns_systemd_dir }}/cloudflare-ddns.service"
+        mode: "0644"
+
+    - name: Install DDNS systemd timer
+      copy:
+        src: "{{ playbook_dir }}/../../infra/ddns/cloudflare-ddns.timer"
+        dest: "{{ ddns_systemd_dir }}/cloudflare-ddns.timer"
+        mode: "0644"
+
+    - name: Render DDNS environment file
+      template:
+        src: "{{ playbook_dir }}/templates/cloudflare-ddns.env.j2"
+        dest: "{{ ddns_env_file }}"
+        mode: "0600"
+      no_log: true
+
+    - name: Reload systemd
+      systemd:
+        daemon_reload: true
+
+    - name: Run DDNS updater once
+      command: systemctl start cloudflare-ddns.service
+      changed_when: true
+
+    - name: Enable and start DDNS timer
+      systemd:
+        name: cloudflare-ddns.timer
+        enabled: true
+        state: started
