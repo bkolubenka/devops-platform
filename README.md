@@ -46,6 +46,7 @@ Host Nginx (prod) / Host TLS edge + Docker Nginx (dev)
 
 Production Nginx runs on the host (installed by `bootstrap.yml`), not inside Docker.
 App containers bind to `127.0.0.1` and are only reachable through the host Nginx reverse proxy.
+The dev VM now also uses a host TLS edge, so `https://local.kydyrov.dev` is reachable publicly on port 443 and proxies into the Docker compose stack.
 
 - `monitor-worker` is a separate demo worker container that records operational log sweeps into the incident log.
 - `action-runner` is a hidden executor container that processes queued service-action jobs so the API never talks to Docker directly.
@@ -396,6 +397,7 @@ Required GitHub secrets:
 ## Notes
 
 - `docker-compose.dev.yaml` is the active working environment; dev uses Docker Nginx behind a host TLS edge on the VM
+- `local.kydyrov.dev` is the public HTTPS entrypoint for the dev VM, with the host edge terminating TLS on 443 and forwarding into Docker Nginx
 - `docker-compose.prod.yaml` is rendered from `infra/ansible/templates/docker-compose.prod.yaml.j2`; prod does **not** include an Nginx container — host Nginx handles all traffic
 - `apps/devops-platform/nginx/prod.conf` is a reference file only; the actual prod config is rendered from `infra/ansible/templates/prod.conf.j2` to `/etc/nginx/conf.d/kydyrov.dev.conf`
 - frontend navigation is shared from `apps/devops-platform/frontend/shared-nav.js` and rendered by both `index.html` and `resume/index.html`

@@ -508,6 +508,10 @@
         state: reloaded
       when: deploy_env in ['dev', 'prod']
 
+    - name: Set effective healthcheck URL
+      set_fact:
+        effective_healthcheck_url: "{{ 'https://' + local_domain + '/health' if deploy_env == 'dev' else healthcheck_url }}"
+
     - name: Wait for nginx port
       wait_for:
         host: 127.0.0.1
@@ -516,7 +520,7 @@
 
     - name: Verify backend health endpoint via nginx
       uri:
-        url: "{{ healthcheck_url }}"
+        url: "{{ effective_healthcheck_url }}"
         method: GET
         status_code: 200
       register: backend_health
