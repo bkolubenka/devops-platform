@@ -19,7 +19,7 @@ Containerized full-stack DevOps platform deployed on an Ubuntu VPS, integrating 
 - GHCR-backed production images for app services
 - Prometheus + Grafana + Node Exporter observability stack with provisioned dashboards and embedded live metrics
 - build metadata footer with app version, image tag, build id, and pinned component versions
-- host-managed Nginx reverse proxy on prod (Docker Nginx on dev)
+- host-managed Nginx reverse proxy on prod and home dev TLS edge (Docker Nginx behind it on dev)
 - two-phase infrastructure: `bootstrap.yml` for one-time server setup + `playbook.yml` for app deploys
 - Ansible-based deployment
 - GitHub Actions CI with bootstrap, publish, deploy, and auto-deploy workflows
@@ -29,14 +29,14 @@ Containerized full-stack DevOps platform deployed on an Ubuntu VPS, integrating 
 
 ```text
 GitHub Actions
-    ↓
+  ↓
 Self-hosted runner (vm-1 or vps-1)
-    ↓
+  ↓
 Ansible (local or SSH to VPS)
-    ↓
+  ↓
 Docker Compose (app containers)
-    ↓
-Host Nginx (prod) / Docker Nginx (dev)
+  ↓
+Host Nginx (prod) / Host TLS edge + Docker Nginx (dev)
   ├─ /        -> frontend (127.0.0.1:8080)
   ├─ /api/*   -> FastAPI backend (127.0.0.1:8000)
   ├─ /health  -> backend health check
@@ -316,7 +316,7 @@ DEPLOY_ENV=prod DEPLOY_IMAGE_TAG=<sha12> DEPLOY_DB_PASSWORD=<pw> DEPLOY_SECRET_K
 ```
 
 Deploy handles:
-- Dev: clone repo, build containers from source, start Docker Nginx
+- Dev: clone repo, build containers from source, start Docker Nginx, expose local.kydyrov.dev through host TLS edge
 - Prod: render compose/env/nginx templates, pull GHCR images, run migrations, start stack, validate host nginx config (`nginx -t`), reload host nginx
 - Prod requires SSL certificates to already exist (fails with guidance to run `bootstrap.yml` if missing)
 
@@ -395,7 +395,7 @@ Required GitHub secrets:
 
 ## Notes
 
-- `docker-compose.dev.yaml` is the active working environment; dev uses Docker Nginx inside the compose stack
+- `docker-compose.dev.yaml` is the active working environment; dev uses Docker Nginx behind a host TLS edge on the VM
 - `docker-compose.prod.yaml` is rendered from `infra/ansible/templates/docker-compose.prod.yaml.j2`; prod does **not** include an Nginx container — host Nginx handles all traffic
 - `apps/devops-platform/nginx/prod.conf` is a reference file only; the actual prod config is rendered from `infra/ansible/templates/prod.conf.j2` to `/etc/nginx/conf.d/kydyrov.dev.conf`
 - frontend navigation is shared from `apps/devops-platform/frontend/shared-nav.js` and rendered by both `index.html` and `resume/index.html`
