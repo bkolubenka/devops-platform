@@ -196,6 +196,59 @@
         opacity: 0.68;
       }
 
+      .env-card {
+        display: grid;
+        gap: 12px;
+      }
+
+      .env-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .env-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 92px;
+        padding: 10px 14px;
+        border-radius: 999px;
+        border: 1px solid transparent;
+        text-decoration: none;
+        font-weight: 700;
+        transition:
+          transform 0.18s ease,
+          box-shadow 0.18s ease,
+          opacity 0.18s ease,
+          border-color 0.18s ease,
+          background 0.18s ease;
+      }
+
+      .env-button:hover {
+        transform: translateY(-1px);
+      }
+
+      .env-button-current {
+        color: var(--accent);
+        background: var(--accent-soft);
+        border-color: rgba(191, 90, 29, 0.16);
+      }
+
+      .env-button-active {
+        color: #fffaf2;
+        background: var(--accent);
+        box-shadow: 0 12px 24px rgba(191, 90, 29, 0.18);
+      }
+
+      .env-button-disabled {
+        color: var(--muted);
+        background: rgba(92, 102, 119, 0.08);
+        border-color: rgba(92, 102, 119, 0.12);
+        cursor: not-allowed;
+        pointer-events: none;
+      }
+
       .card-title {
         margin: 0 0 8px;
         font-size: 1.15rem;
@@ -946,6 +999,16 @@
         return apiEnvironment || "unknown";
       }
 
+      function getEnvironmentLink(environmentName) {
+        if (environmentName === "development") {
+          return { label: "dev", href: "https://local.kydyrov.dev/" };
+        }
+        if (environmentName === "production") {
+          return { label: "prod", href: "https://kydyrov.dev/" };
+        }
+        return { label: environmentName || "unknown", href: "/" };
+      }
+
       function isPlatformOnline(data) {
         return [data.backend_status, data.database_status, data.frontend_status, data.nginx_status].every(
           (value) => value === "ok"
@@ -1077,6 +1140,11 @@
           const data = await apiRequest("/api/overview");
           const environmentLabel = inferEnvironmentLabel(data.environment);
           const platformOnline = isPlatformOnline(data);
+          const currentEnvironment = getEnvironmentLink(environmentLabel);
+          const alternateEnvironment =
+            environmentLabel === "development"
+              ? getEnvironmentLink("production")
+              : getEnvironmentLink("development");
 
           metrics.innerHTML = `
             <article class="card">
@@ -1104,11 +1172,17 @@
               <div class="metric">${data.service_count}</div>
               <p class="metric-meta">${data.healthy_service_count} healthy service targets.</p>
             </article>
-            ${platformOnline ? `<a class="card card-link" href="/" rel="noreferrer">` : `<article class="card card-disabled" aria-disabled="true">`}
+            <article class="card ${platformOnline ? "" : "card-disabled"}">
               <div class="label">Environment</div>
-              <div class="metric ${platformOnline ? "ok" : "bad"}">${environmentLabel}</div>
-              <p class="metric-meta">${platformOnline ? "Platform online. Open the current web entrypoint." : "Platform offline. Card is disabled until the edge and backend recover."}</p>
-            ${platformOnline ? `</a>` : `</article>`}
+              <div class="env-card">
+                <div class="metric ${platformOnline ? "ok" : "bad"}">${environmentLabel}</div>
+                <p class="metric-meta">${platformOnline ? "Platform online. Switch between prod and dev." : "Platform offline. Environment buttons are disabled until the edge and backend recover."}</p>
+                <div class="env-actions">
+                  <span class="env-button env-button-current">${currentEnvironment.label}</span>
+                  ${platformOnline ? `<a class="env-button env-button-active" href="${alternateEnvironment.href}">${alternateEnvironment.label}</a>` : `<span class="env-button env-button-disabled">${alternateEnvironment.label}</span>`}
+                </div>
+              </div>
+            </article>
           `;
 
           const componentMarkup = Object.entries(data.build.component_versions || {})
