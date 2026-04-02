@@ -176,6 +176,26 @@
         padding: 18px;
       }
 
+      .card-link {
+        display: block;
+        color: inherit;
+        text-decoration: none;
+        transition:
+          transform 0.18s ease,
+          box-shadow 0.18s ease,
+          border-color 0.18s ease;
+      }
+
+      .card-link:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 18px 32px rgba(29, 37, 51, 0.08);
+        border-color: rgba(191, 90, 29, 0.22);
+      }
+
+      .card-disabled {
+        opacity: 0.68;
+      }
+
       .card-title {
         margin: 0 0 8px;
         font-size: 1.15rem;
@@ -919,6 +939,19 @@
         return "bad";
       }
 
+      function inferEnvironmentLabel(apiEnvironment) {
+        const hostname = window.location.hostname;
+        if (hostname === "local.kydyrov.dev") return "development";
+        if (hostname === "kydyrov.dev" || hostname === "www.kydyrov.dev") return "production";
+        return apiEnvironment || "unknown";
+      }
+
+      function isPlatformOnline(data) {
+        return [data.backend_status, data.database_status, data.frontend_status, data.nginx_status].every(
+          (value) => value === "ok"
+        );
+      }
+
       function actionClass(action) {
         if (action === "restart") return "btn-primary";
         if (action === "start") return "btn-secondary";
@@ -1042,6 +1075,8 @@
 
         try {
           const data = await apiRequest("/api/overview");
+          const environmentLabel = inferEnvironmentLabel(data.environment);
+          const platformOnline = isPlatformOnline(data);
 
           metrics.innerHTML = `
             <article class="card">
@@ -1069,11 +1104,11 @@
               <div class="metric">${data.service_count}</div>
               <p class="metric-meta">${data.healthy_service_count} healthy service targets.</p>
             </article>
-            <article class="card">
+            ${platformOnline ? `<a class="card card-link" href="/" rel="noreferrer">` : `<article class="card card-disabled" aria-disabled="true">`}
               <div class="label">Environment</div>
-              <div class="metric">${data.environment}</div>
-              <p class="metric-meta">Current application profile returned by the API.</p>
-            </article>
+              <div class="metric ${platformOnline ? "ok" : "bad"}">${environmentLabel}</div>
+              <p class="metric-meta">${platformOnline ? "Platform online. Open the current web entrypoint." : "Platform offline. Card is disabled until the edge and backend recover."}</p>
+            ${platformOnline ? `</a>` : `</article>`}
           `;
 
           const componentMarkup = Object.entries(data.build.component_versions || {})
