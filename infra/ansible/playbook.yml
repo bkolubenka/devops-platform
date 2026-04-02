@@ -500,13 +500,13 @@
     - name: Validate nginx configuration
       command: nginx -t
       changed_when: false
-      when: deploy_env == 'prod'
+      when: deploy_env in ['dev', 'prod']
 
     - name: Reload nginx to pick up new configuration
       service:
         name: nginx
         state: reloaded
-      when: deploy_env == 'prod'
+      when: deploy_env in ['dev', 'prod']
 
     - name: Wait for nginx port
       wait_for:
