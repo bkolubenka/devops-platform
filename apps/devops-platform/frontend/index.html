@@ -1224,9 +1224,11 @@
             ${renderEnvironmentCardContainer("development", environmentLabel, developmentCardOnline)}
           `;
 
-          if (environmentLabel === "production") {
-            void refreshEnvironmentCard("development", environmentLabel);
-          }
+          ["production", "development"]
+            .filter((environmentName) => environmentName !== environmentLabel)
+            .forEach((environmentName) => {
+              void refreshEnvironmentCard(environmentName, environmentLabel);
+            });
 
           const componentMarkup = Object.entries(data.build.component_versions || {})
             .map(
