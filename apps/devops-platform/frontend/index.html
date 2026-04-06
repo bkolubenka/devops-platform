@@ -196,6 +196,15 @@
         opacity: 0.68;
       }
 
+      .env-card-offline {
+        filter: grayscale(1);
+        border-color: rgba(29, 37, 51, 0.18);
+      }
+
+      .env-card-offline * {
+        color: #7a7f88 !important;
+      }
+
       .env-card-link {
         display: block;
         color: inherit;
@@ -208,7 +217,7 @@
 
       .env-card-status {
         font-size: 1.2rem;
-        font-weight: 700;
+        font-weight: 400;
       }
 
       .env-card-status-online {
@@ -991,7 +1000,47 @@
         );
       }
 
-      function renderEnvironmentCard(environmentName, currentEnvironmentName, platformOnline) {
+      function getEnvironmentCardContainerId(environmentName) {
+        return `env-card-${environmentName}`;
+      }
+
+      function renderEnvironmentCardContainer(environmentName, currentEnvironmentName, environmentOnline) {
+        return `<div id="${getEnvironmentCardContainerId(environmentName)}">${renderEnvironmentCard(
+          environmentName,
+          currentEnvironmentName,
+          environmentOnline
+        )}</div>`;
+      }
+
+      async function isEnvironmentHealthy(environmentName) {
+        const environment = getEnvironmentLink(environmentName);
+        const healthUrl = new URL("api/health", environment.href).toString();
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4500);
+
+        try {
+          const response = await fetch(healthUrl, {
+            method: "GET",
+            signal: controller.signal,
+          });
+          if (!response.ok) return false;
+          const payload = await response.json();
+          return payload?.status === "ok";
+        } catch (error) {
+          return false;
+        } finally {
+          clearTimeout(timeoutId);
+        }
+      }
+
+      async function refreshEnvironmentCard(environmentName, currentEnvironmentName) {
+        const target = document.getElementById(getEnvironmentCardContainerId(environmentName));
+        if (!target) return;
+        const environmentOnline = await isEnvironmentHealthy(environmentName);
+        target.innerHTML = renderEnvironmentCard(environmentName, currentEnvironmentName, environmentOnline);
+      }
+
+      function renderEnvironmentCard(environmentName, currentEnvironmentName, environmentOnline) {
         const environment = getEnvironmentLink(environmentName);
         const title = environmentName === "production" ? "Production" : "Development";
 
@@ -1005,15 +1054,15 @@
           `;
         }
 
-        const statusText = platformOnline ? "Online" : "Offline";
-        const statusClassName = platformOnline ? "env-card-status env-card-status-online" : "env-card-status env-card-status-offline";
+        const statusText = environmentOnline ? "Online" : "Offline";
+        const statusClassName = environmentOnline ? "env-card-status env-card-status-online" : "env-card-status env-card-status-offline";
 
         return `
-          ${platformOnline ? `<a class="card env-card-link" href="${environment.href}">` : `<article class="card card-disabled">`}
+          ${environmentOnline ? `<a class="card env-card-link" href="${environment.href}">` : `<article class="card card-disabled env-card-offline">`}
             <div class="label">${title}</div>
             <div class="metric ${statusClassName}">${statusText}</div>
-            <p class="metric-meta">${platformOnline ? "Open the public entrypoint for this environment." : "This environment is unavailable until the platform recovers."}</p>
-          ${platformOnline ? `</a>` : `</article>`}
+            <p class="metric-meta">${environmentOnline ? "Open the public entrypoint for this environment." : "This environment is unavailable until the platform recovers."}</p>
+          ${environmentOnline ? `</a>` : `</article>`}
         `;
       }
 
@@ -1142,6 +1191,8 @@
           const data = await apiRequest("/api/overview");
           const environmentLabel = inferEnvironmentLabel(data.environment);
           const platformOnline = isPlatformOnline(data);
+          const productionCardOnline = environmentLabel === "production" ? platformOnline : false;
+          const developmentCardOnline = environmentLabel === "development" ? platformOnline : false;
 
           metrics.innerHTML = `
             <article class="card">
@@ -1169,9 +1220,13 @@
               <div class="metric">${data.service_count}</div>
               <p class="metric-meta">${data.healthy_service_count} healthy service targets.</p>
             </article>
-            ${renderEnvironmentCard("production", environmentLabel, platformOnline)}
-            ${renderEnvironmentCard("development", environmentLabel, platformOnline)}
+            ${renderEnvironmentCardContainer("production", environmentLabel, productionCardOnline)}
+            ${renderEnvironmentCardContainer("development", environmentLabel, developmentCardOnline)}
           `;
+
+          if (environmentLabel === "production") {
+            void refreshEnvironmentCard("development", environmentLabel);
+          }
 
           const componentMarkup = Object.entries(data.build.component_versions || {})
             .map(
