@@ -21,7 +21,7 @@ env:
 
 jobs:
   bootstrap:
-    runs-on: [self-hosted, linux]
+    runs-on: ${{ inputs.deploy_env == 'dev' && 'vm-1' || 'self-hosted' }}
 
     steps:
       - name: Checkout repository
@@ -40,7 +40,7 @@ jobs:
           pip install ansible
 
       - name: Set up SSH for remote bootstrap
-        if: ${{ runner.name != 'vps-1' }}
+        if: ${{ inputs.deploy_env == 'prod' && runner.name != 'vps-1' }}
         env:
           SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -52,7 +52,7 @@ jobs:
 
       - name: Create Ansible inventory
         run: |
-          if [ "$RUNNER_NAME" = "vps-1" ]; then
+          if [ "${{ inputs.deploy_env }}" = "dev" ] || [ "$RUNNER_NAME" = "vps-1" ]; then
             cat > infra/ansible/inventory.runner.ini <<EOF
           [server]
           localhost ansible_connection=local ansible_python_interpreter=/usr/bin/python3
