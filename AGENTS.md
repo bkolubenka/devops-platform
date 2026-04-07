@@ -7,7 +7,7 @@ Guidance for coding agents working in this repository.
 This repository is a VM-based DevOps pet project with:
 
 - FastAPI backend
-- static frontend
+- Vite-built React + TypeScript frontend
 - PostgreSQL
 - host-managed Nginx reverse proxy on prod (Docker Nginx on dev)
 - two-phase Ansible deployment: `bootstrap.yml` (one-time infra) + `playbook.yml` (app deploy)

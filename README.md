@@ -8,7 +8,7 @@ Containerized full-stack DevOps platform deployed on an Ubuntu VPS, integrating 
 ## What This Project Shows
 
 - FastAPI backend with portfolio, service catalog, overview, incident log, and incident-assistant AI endpoints
-- static frontend served separately from the backend
+- Vite-built React + TypeScript frontend served separately from the backend
 - PostgreSQL-backed persistence
 - Alembic migrations for schema and release data changes
 - CRUD management for projects, services, and incidents, with `/api/incidents` also serving as the operational log for monitor-worker sweeps and service-action events
@@ -56,6 +56,9 @@ The dev VM now also uses a host TLS edge, so `https://local.kydyrov.dev` is reac
 
 - Python 3.11
 - FastAPI
+- React 18
+- TypeScript
+- Vite
 - SQLAlchemy
 - PostgreSQL
 - Nginx (host-managed on prod, Docker container on dev)
@@ -80,10 +83,12 @@ apps/devops-platform/
     requirements.txt
     Dockerfile
   frontend/
+    src/
+    public/
+      resume/
     index.html
-    shared-nav.js
-    resume/
-      index.html
+    package.json
+    vite.config.ts
     Dockerfile
   nginx/
     dev.conf          ← used by Docker Nginx in dev
@@ -403,7 +408,7 @@ Required GitHub secrets:
 - `local.kydyrov.dev` is the public HTTPS entrypoint for the dev VM, with the host edge terminating TLS on 443 and forwarding into Docker Nginx
 - `docker-compose.prod.yaml` is rendered from `infra/ansible/templates/docker-compose.prod.yaml.j2`; prod does **not** include an Nginx container — host Nginx handles all traffic
 - `apps/devops-platform/nginx/prod.conf` is a reference file only; the actual prod config is rendered from `infra/ansible/templates/prod.conf.j2` to `/etc/nginx/conf.d/kydyrov.dev.conf`
-- frontend navigation is shared from `apps/devops-platform/frontend/shared-nav.js` and rendered by both `index.html` and `resume/index.html`
+- frontend is a Vite + React + TypeScript app; `/resume/` is handled by the SPA and the PDF is shipped from `apps/devops-platform/frontend/public/resume/`
 - Postgres data lives in a named volume and is preserved across deploys
 - Schema and release-bound data changes should be done through Alembic migrations
 - services have an `environment` field (`dev`, `production`, or `all`); the overview API and monitor-worker only probe services whose environment matches the runtime `ENVIRONMENT` or is `all`
