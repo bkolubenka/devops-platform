@@ -99,8 +99,11 @@ infra/
     playbook.yml      ← app deployment (dev and prod)
     group_vars/
       all.yml
+    tasks/
+      verify_ingress_smoke.yml  ← reusable post-deploy smoke checks
     templates/
       docker-compose.prod.yaml.j2
+      local-dev.conf.j2  ← dev host TLS edge rendered to /etc/nginx/conf.d/
       prod.conf.j2    ← host Nginx config rendered to /etc/nginx/conf.d/
       ssl-params.conf.j2
       prod.env.j2
@@ -349,7 +352,7 @@ GitHub Actions workflows:
 Deploy details:
 
 - runs on self-hosted runners with smart routing:
-  - **Dev deploys** → `vm-1` runner (local VirtualBox VM), Ansible runs locally
+  - **Dev deploys** → `vm-1` runner (local Hyper-V Ubuntu server), Ansible runs locally
   - **Prod deploys** → any available self-hosted runner; if runner is `vps-1`, Ansible runs locally; otherwise Ansible connects to the VPS via SSH
 - auto deploy uses the published commit SHA (short tag) as the production image tag
 - GHCR authentication is performed by Ansible on the target host (not the runner)

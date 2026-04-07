@@ -1,7 +1,11 @@
 #!/bin/bash
-# Legacy helper for early runner bootstrap.
-# Current deploy uses a self-hosted runner on the VM and manual GitHub Actions dispatch.
-# Run this on the VM as root or with sudo if you still need the old bootstrap flow.
+# DEPRECATED — This script is no longer used.
+# Runner setup is now documented in .github/RUNNER_SETUP.md.
+# Infrastructure is provisioned by bootstrap.yml (Docker, Nginx, SSL, UFW).
+# This file is kept for historical reference only.
+#
+# Current deploy uses a self-hosted runner on the Hyper-V Ubuntu server
+# and manual GitHub Actions dispatch.
 
 set -e
 
@@ -9,7 +13,7 @@ echo "🔧 Setting up GitHub Actions runner with proper permissions..."
 
 # Install required packages
 apt update
-apt install -y docker.io docker-compose certbot python3-certbot-nginx
+apt install -y docker.io docker-compose-plugin certbot python3-certbot-nginx
 
 # Start Docker service
 systemctl start docker

@@ -16,7 +16,7 @@ upstream app_prometheus {
 
 server {
     listen 80;
-    server_name {{ domain_name }} {{ domain_www }} {{ test_domain }} {{ local_domain }};
+    server_name {{ domain_name }} {{ domain_www }} {{ local_domain }};
     server_tokens off;
 
     location = /health {
@@ -47,7 +47,7 @@ server {
 
 server {
     listen 443 ssl http2;
-    server_name {{ domain_name }} {{ test_domain }} {{ local_domain }};
+    server_name {{ domain_name }} {{ local_domain }};
     server_tokens off;
 
     ssl_certificate /etc/letsencrypt/live/{{ domain_name }}/fullchain.pem;
