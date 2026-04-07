@@ -12,15 +12,15 @@ import type {
 } from "../types";
 
 interface RequestOptions extends RequestInit {
-  body?: unknown;
+  jsonBody?: unknown;
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const headers = new Headers(options.headers ?? {});
   const body =
-    options.body === undefined || options.body === null
+    options.jsonBody === undefined || options.jsonBody === null
       ? undefined
-      : JSON.stringify(options.body);
+      : JSON.stringify(options.jsonBody);
 
   if (body) {
     headers.set("Content-Type", "application/json");
@@ -56,34 +56,34 @@ export const api = {
   getProjects: () => request<Project[]>("/api/portfolio/projects"),
   getProject: (id: number) => request<Project>(`/api/portfolio/projects/${id}`),
   createProject: (payload: ProjectPayload) =>
-    request<Project>("/api/portfolio/projects", { method: "POST", body: payload }),
+    request<Project>("/api/portfolio/projects", { method: "POST", jsonBody: payload }),
   updateProject: (id: number, payload: ProjectPayload) =>
-    request<Project>(`/api/portfolio/projects/${id}`, { method: "PUT", body: payload }),
+    request<Project>(`/api/portfolio/projects/${id}`, { method: "PUT", jsonBody: payload }),
   deleteProject: (id: number) =>
     request<null>(`/api/portfolio/projects/${id}`, { method: "DELETE" }),
   getServices: () => request<Service[]>("/api/services"),
   getService: (id: number) => request<Service>(`/api/services/${id}`),
   createService: (payload: ServicePayload) =>
-    request<Service>("/api/services", { method: "POST", body: payload }),
+    request<Service>("/api/services", { method: "POST", jsonBody: payload }),
   updateService: (id: number, payload: ServicePayload) =>
-    request<Service>(`/api/services/${id}`, { method: "PUT", body: payload }),
+    request<Service>(`/api/services/${id}`, { method: "PUT", jsonBody: payload }),
   deleteService: (id: number) => request<null>(`/api/services/${id}`, { method: "DELETE" }),
   queueServiceAction: (id: number, action: "restart" | "start" | "stop") =>
     request<ServiceActionResponse>(`/api/services/${id}/actions`, {
       method: "POST",
-      body: { action },
+      jsonBody: { action },
     }),
   getIncidents: () => request<Incident[]>("/api/incidents"),
   getIncident: (id: number) => request<Incident>(`/api/incidents/${id}`),
   createIncident: (payload: IncidentPayload) =>
-    request<Incident>("/api/incidents", { method: "POST", body: payload }),
+    request<Incident>("/api/incidents", { method: "POST", jsonBody: payload }),
   updateIncident: (id: number, payload: IncidentPayload) =>
-    request<Incident>(`/api/incidents/${id}`, { method: "PUT", body: payload }),
+    request<Incident>(`/api/incidents/${id}`, { method: "PUT", jsonBody: payload }),
   deleteIncident: (id: number) =>
     request<null>(`/api/incidents/${id}`, { method: "DELETE" }),
   analyzeIncident: (payload: IncidentAnalysisPayload) =>
     request<IncidentAnalysisResponse>("/api/ai/incidents/analyze", {
       method: "POST",
-      body: payload,
+      jsonBody: payload,
     }),
 };
