@@ -456,6 +456,20 @@
       changed_when: false
       when: deploy_env == 'dev'
 
+    - name: Verify dev API HTTPS endpoint via host nginx
+      shell: >-
+        curl --fail --silent --show-error
+        --resolve {{ local_domain }}:443:127.0.0.1
+        https://{{ local_domain }}/api/health
+      args:
+        executable: /bin/bash
+      register: dev_https_api_health
+      retries: 15
+      delay: 4
+      until: dev_https_api_health is not failed
+      changed_when: false
+      when: deploy_env == 'dev'
+
     - name: Authenticate Docker with GHCR for production image pulls
       shell: echo "{{ ghcr_token }}" | docker login ghcr.io -u "{{ ghcr_owner }}" --password-stdin
       no_log: true
@@ -530,7 +544,7 @@
 
     - name: Set effective healthcheck URL
       set_fact:
-        effective_healthcheck_url: "{{ 'https://' + local_domain + '/health' if deploy_env == 'dev' else healthcheck_url }}"
+        effective_healthcheck_url: "{{ healthcheck_url }}"
 
     - name: Wait for nginx port
       wait_for:
