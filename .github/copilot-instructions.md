@@ -14,7 +14,7 @@ Keep changes aligned with the current VM-based deployment model.
 ## Project Facts
 
 - FastAPI backend serves `/health` and `/api/*`.
-- Static frontend is served by Nginx.
+- The frontend is a Vite-built React + TypeScript app served by Nginx.
 - **Production Nginx runs on the host** (installed by `bootstrap.yml`), NOT inside Docker. Config is rendered from `infra/ansible/templates/prod.conf.j2` to `/etc/nginx/conf.d/kydyrov.dev.conf`.
 - **Dev Nginx runs as a Docker container** inside the compose stack, using `apps/devops-platform/nginx/dev.conf`.
 - `apps/devops-platform/nginx/prod.conf` is a reference file only — it is NOT used in production.
@@ -87,7 +87,7 @@ Keep changes aligned with the current VM-based deployment model.
 
 - Prometheus config: `infra/monitoring/prometheus.yml`. Scrapes backend, monitor-worker, node-exporter.
 - Grafana dashboards are auto-provisioned from `infra/monitoring/grafana/dashboards/`.
-- Node Exporter runs in both dev and prod compose stacks (host PID namespace, read-only root mount).
+- Node Exporter runs in prod by default and is available in dev via the optional `host-observability` compose profile (host PID namespace, read-only root mount).
 - Keep Prometheus retention at 7 days (disk budget constraint).
 - New metrics endpoints must be added as scrape targets and be in the Docker Compose network.
 

@@ -442,37 +442,23 @@
         timeout: 90
       when: deploy_env == 'dev'
 
-    - name: Verify ingress smoke endpoints via host nginx
-      shell: |
-        set -euo pipefail
-
-        target_domain="{{ local_domain }}"
-
-        check_endpoint() {
-          local path="$1"
-          local minimum_status="$2"
-          local maximum_status="$3"
-          local status_code
-
-          status_code="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --resolve "${target_domain}:443:127.0.0.1" "https://${target_domain}${path}")"
-
-          if [ "${status_code}" -lt "${minimum_status}" ] || [ "${status_code}" -gt "${maximum_status}" ]; then
-            echo "Unexpected HTTP ${status_code} for ${path}"
-            exit 1
-          fi
-        }
-
-        check_endpoint / 200 299
-        check_endpoint /api/health 200 299
-        check_endpoint /grafana/ 200 299
-        check_endpoint /prometheus/ 200 399
-      args:
-        executable: /bin/bash
-      register: ingress_smoke
-      retries: 15
-      delay: 4
-      until: ingress_smoke is not failed
-      changed_when: false
+    - name: Verify dev ingress smoke endpoints via host nginx
+      include_tasks: tasks/verify_ingress_smoke.yml
+      vars:
+        smoke_target_domain: "{{ local_domain }}"
+        smoke_check_endpoints:
+          - path: /
+            min_status: 200
+            max_status: 299
+          - path: /api/health
+            min_status: 200
+            max_status: 299
+          - path: /grafana/
+            min_status: 200
+            max_status: 299
+          - path: /prometheus/
+            min_status: 200
+            max_status: 399
       when: deploy_env == 'dev'
 
     - name: Verify dev HTTPS endpoint via host nginx
@@ -586,36 +572,22 @@
         timeout: 90
 
     - name: Verify prod ingress smoke endpoints via host nginx
-      shell: |
-        set -euo pipefail
-
-        target_domain="{{ domain_name }}"
-
-        check_endpoint() {
-          local path="$1"
-          local minimum_status="$2"
-          local maximum_status="$3"
-          local status_code
-
-          status_code="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --resolve "${target_domain}:443:127.0.0.1" "https://${target_domain}${path}")"
-
-          if [ "${status_code}" -lt "${minimum_status}" ] || [ "${status_code}" -gt "${maximum_status}" ]; then
-            echo "Unexpected HTTP ${status_code} for ${path}"
-            exit 1
-          fi
-        }
-
-        check_endpoint / 200 299
-        check_endpoint /api/health 200 299
-        check_endpoint /grafana/ 200 299
-        check_endpoint /prometheus/ 200 399
-      args:
-        executable: /bin/bash
-      register: prod_ingress_smoke
-      retries: 15
-      delay: 4
-      until: prod_ingress_smoke is not failed
-      changed_when: false
+      include_tasks: tasks/verify_ingress_smoke.yml
+      vars:
+        smoke_target_domain: "{{ domain_name }}"
+        smoke_check_endpoints:
+          - path: /
+            min_status: 200
+            max_status: 299
+          - path: /api/health
+            min_status: 200
+            max_status: 299
+          - path: /grafana/
+            min_status: 200
+            max_status: 299
+          - path: /prometheus/
+            min_status: 200
+            max_status: 399
       when: deploy_env == 'prod'
 
     - name: Verify backend health endpoint via nginx

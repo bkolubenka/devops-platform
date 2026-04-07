@@ -1,0 +1,30 @@
+- name: Verify ingress smoke endpoints via host nginx
+  shell: |
+    set -euo pipefail
+
+    target_domain="{{ smoke_target_domain }}"
+
+    check_endpoint() {
+      local path="$1"
+      local minimum_status="$2"
+      local maximum_status="$3"
+      local status_code
+
+      status_code="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --resolve "${target_domain}:443:127.0.0.1" "https://${target_domain}${path}")"
+
+      if [ "${status_code}" -lt "${minimum_status}" ] || [ "${status_code}" -gt "${maximum_status}" ]; then
+        echo "Unexpected HTTP ${status_code} for ${path}"
+        exit 1
+      fi
+    }
+
+    {% for endpoint in smoke_check_endpoints %}
+    check_endpoint {{ endpoint.path }} {{ endpoint.min_status }} {{ endpoint.max_status }}
+    {% endfor %}
+  args:
+    executable: /bin/bash
+  register: ingress_smoke_result
+  retries: 15
+  delay: 4
+  until: ingress_smoke_result is not failed
+  changed_when: false

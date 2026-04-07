@@ -7,7 +7,7 @@ Guidance for coding agents working in this repository.
 This repository is a VM-based DevOps pet project with:
 
 - FastAPI backend
-- static frontend
+- Vite-built React + TypeScript frontend
 - PostgreSQL
 - host-managed Nginx reverse proxy on prod (Docker Nginx on dev)
 - two-phase Ansible deployment: `bootstrap.yml` (one-time infra) + `playbook.yml` (app deploy)
@@ -125,7 +125,7 @@ Infrastructure is split into two Ansible playbooks:
 
 - Prometheus scrape config lives in `infra/monitoring/prometheus.yml` — update it when adding new metric endpoints.
 - Grafana dashboards are provisioned from `infra/monitoring/grafana/dashboards/` — export JSON from Grafana and commit it.
-- Node Exporter is part of both dev and prod compose stacks; it runs in host PID namespace with root filesystem mounted read-only.
+- Node Exporter is part of the prod compose stack and available in dev via the optional `host-observability` compose profile; it runs in host PID namespace with root filesystem mounted read-only.
 - Grafana has anonymous Viewer access enabled; do not change this without considering public dashboard visibility.
 - New scrape targets must be in the Docker Compose network so Prometheus can reach them by container name.
 - Keep Prometheus retention at 7 days to stay within the 40 GB disk budget.

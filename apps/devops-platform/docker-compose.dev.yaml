@@ -182,6 +182,8 @@ services:
     image: prom/node-exporter:v1.7.0
     container_name: node_exporter
     restart: unless-stopped
+    profiles:
+      - host-observability
     command:
       - "--path.rootfs=/host"
     volumes:
