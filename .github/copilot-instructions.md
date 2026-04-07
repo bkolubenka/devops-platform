@@ -33,7 +33,7 @@ Keep changes aligned with the current VM-based deployment model.
 - Auto-deploy to prod happens after successful `Publish Images` on main (any self-hosted runner).
 - GHCR authentication is performed by Ansible on the target host.
 - SSL is live on `kydyrov.dev` via Let's Encrypt + Cloudflare DNS-01 (issued by `bootstrap.yml`).
-- Required secrets: `BECOME_PASSWORD`, `DB_PASSWORD`, `SECRET_KEY`, `CF_API_TOKEN`, `SSH_PRIVATE_KEY`, `SSH_HOST`, `SSH_USER`.
+- Required secrets: `DB_PASSWORD`, `SECRET_KEY`, `CF_API_TOKEN`, `SSH_PRIVATE_KEY`, `SSH_HOST`, `SSH_USER`. `BECOME_PASSWORD` is optional when the deploy user has passwordless sudo.
 - Production `db_password` and `secret_key` have NO fallback defaults — deploy fails if not provided.
 - `monitor-worker` is a non-critical service that records operational log entries for the incident assistant.
 - `node-exporter` exposes host-level metrics (CPU, memory, disk, network) scraped by Prometheus.

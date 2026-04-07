@@ -94,9 +94,14 @@ jobs:
           DEPLOY_OLLAMA_MODEL: ${{ vars.OLLAMA_MODEL }}
           DEPLOY_OLLAMA_TIMEOUT_SECONDS: ${{ vars.OLLAMA_TIMEOUT_SECONDS }}
         run: |
+          EXTRA_ARGS=()
+          if [ -n "${ANSIBLE_BECOME_PASSWORD}" ]; then
+            EXTRA_ARGS+=( -e "ansible_become_password=${ANSIBLE_BECOME_PASSWORD}" )
+          fi
+
           ANSIBLE_LOCAL_TEMP=/tmp/.ansible/tmp \
           ansible-playbook \
           -i infra/ansible/inventory.runner.ini \
           infra/ansible/playbook.yml \
-          -e "ansible_become_password=${ANSIBLE_BECOME_PASSWORD}" \
+          "${EXTRA_ARGS[@]}" \
           -e "deploy_env=${DEPLOY_ENV}"
