@@ -48,7 +48,7 @@ Infrastructure is split into two Ansible playbooks:
 - Dev deploys run on `vm-1` (local VirtualBox VM); Ansible executes locally.
 - Prod deploys run on any available self-hosted runner (`vps-1` preferred). When the runner is `vps-1`, Ansible runs locally; otherwise it connects to the VPS via SSH.
 - Auto-deploy to prod triggers after successful `Publish Images` on `main` (any self-hosted runner).
-- Required GitHub secrets: `BECOME_PASSWORD`, `DB_PASSWORD`, `SECRET_KEY`, `CF_API_TOKEN`, `SSH_PRIVATE_KEY`, `SSH_HOST`, `SSH_USER`.
+- Required GitHub secrets: `DB_PASSWORD`, `SECRET_KEY`, `CF_API_TOKEN`, `SSH_PRIVATE_KEY`, `SSH_HOST`, `SSH_USER`. `BECOME_PASSWORD` is optional when the deploy user has passwordless sudo.
 - Production app services are pulled from GHCR; dev still builds from source locally.
 - GHCR authentication is performed by Ansible on the target host.
 - Prod runtime files are rendered into `/opt/devops-platform`; prod should not depend on an app git checkout on the server.

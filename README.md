@@ -186,7 +186,7 @@ Before deploying to production, configure these GitHub repository secrets:
 
 | Secret | How to get it |
 |---|---|
-| `BECOME_PASSWORD` | sudo password for the deploy user on the VPS |
+| `BECOME_PASSWORD` | Optional: sudo password for the deploy user (only needed if passwordless sudo is not configured) |
 | `DB_PASSWORD` | Generate a strong random password for PostgreSQL |
 | `SECRET_KEY` | Generate a random string (e.g. `openssl rand -hex 32`) |
 | `CF_API_TOKEN` | Create a Cloudflare API token with DNS edit permissions for your zone |
@@ -379,7 +379,7 @@ Required GitHub secrets:
 
 | Secret | Used by | Purpose |
 |---|---|---|
-| `BECOME_PASSWORD` | deploy, bootstrap | Ansible become (sudo) password |
+| `BECOME_PASSWORD` | deploy, bootstrap | Optional: Ansible become (sudo) password when passwordless sudo is unavailable |
 | `DB_PASSWORD` | deploy | PostgreSQL password (prod only) |
 | `SECRET_KEY` | deploy | FastAPI secret key (prod only) |
 | `CF_API_TOKEN` | bootstrap | Cloudflare API token for DNS-01 SSL issuance |
