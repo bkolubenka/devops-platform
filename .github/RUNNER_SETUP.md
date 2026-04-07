@@ -2,7 +2,7 @@
 
 This project uses two self-hosted GitHub Actions runners for deployment:
 
-- `vm-1`: Local VirtualBox VM for dev environment
+- `vm-1`: Local Hyper-V Ubuntu server for dev environment
 - `vps-1`: Remote VPS for prod environment
 
 ## Runner Labels and Requirements
@@ -27,7 +27,7 @@ Each runner needs:
 
 ### 1. Register `vm-1` (Local VM)
 
-On your local VirtualBox VM, register as the `actions-runner` user:
+On your local Hyper-V Ubuntu server, register as the `actions-runner` user:
 
 ```bash
 # On the VM as root or sudoer

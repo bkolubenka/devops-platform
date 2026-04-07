@@ -22,7 +22,7 @@ Keep changes aligned with the current VM-based deployment model.
 - `bootstrap.yml` installs Docker, host Nginx, certbot, UFW, issues SSL certificates.
 - `playbook.yml` deploys the app; it does NOT issue SSL certificates (fails if missing, with guidance to run bootstrap).
 - Deploy runs on self-hosted runners with smart routing:
-  - Dev deploys use `vm-1` runner (local VirtualBox VM); Ansible runs locally.
+  - Dev deploys use `vm-1` runner (local Hyper-V Ubuntu server); Ansible runs locally.
   - Prod deploys use any available self-hosted runner; if `vps-1`, Ansible runs locally; otherwise connects via SSH.
 - Runners are registered with labels matching their names (`vm-1`, `vps-1`).
 - Production app services are published to GHCR and pulled during deploy.
