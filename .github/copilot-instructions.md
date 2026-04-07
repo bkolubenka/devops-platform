@@ -87,7 +87,7 @@ Keep changes aligned with the current VM-based deployment model.
 
 - Prometheus config: `infra/monitoring/prometheus.yml`. Scrapes backend, monitor-worker, node-exporter.
 - Grafana dashboards are auto-provisioned from `infra/monitoring/grafana/dashboards/`.
-- Node Exporter runs in both dev and prod compose stacks (host PID namespace, read-only root mount).
+- Node Exporter runs in prod by default and is available in dev via the optional `host-observability` compose profile (host PID namespace, read-only root mount).
 - Keep Prometheus retention at 7 days (disk budget constraint).
 - New metrics endpoints must be added as scrape targets and be in the Docker Compose network.
 

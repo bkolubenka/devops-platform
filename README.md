@@ -179,6 +179,12 @@ Open:
 
 Dev uses `.env.dev` for all configuration. No secrets setup required for local development.
 
+On WSL, the default dev stack intentionally skips `node-exporter` because the host-root bind mount is not portable there. If you are running on a native Linux host and want host metrics in dev, enable it explicitly:
+
+```bash
+docker compose --env-file .env.dev -f docker-compose.dev.yaml --profile host-observability up --build
+```
+
 ### 2. Run tests
 
 ```bash
