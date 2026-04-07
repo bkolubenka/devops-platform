@@ -1489,13 +1489,13 @@ export function PortalPage() {
                       target="_blank"
                       rel="noreferrer"
                     >
-                      Open full dashboard {"->"}
+                      Open full dashboard &rarr;
                     </a>
                   </div>
                   <div className="detail-item">
                     <span>Prometheus</span>
                     <a className="inline-link" href="/prometheus/targets" target="_blank" rel="noreferrer">
-                      Open Prometheus {"->"}
+                      Open Prometheus &rarr;
                     </a>
                   </div>
                 </div>
