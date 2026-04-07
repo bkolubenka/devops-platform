@@ -32,7 +32,7 @@ env:
 
 jobs:
   deploy:
-    runs-on: ${{ inputs.deploy_env == 'dev' && 'vm-1' || 'self-hosted' }}
+    runs-on: ${{ inputs.deploy_env == 'dev' && 'vm-1' || 'vps-1' }}
 
     steps:
       - name: Checkout repository
@@ -76,18 +76,31 @@ jobs:
         env:
           SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
         run: |
+          set -euo pipefail
+          SSH_HOST_CLEAN="$(echo "${SSH_HOST}" | tr -d '[:space:]')"
+          SSH_USER_CLEAN="$(echo "${SSH_USER}" | tr -d '[:space:]')"
+
+          if [ -z "${SSH_KEY}" ] || [ -z "${SSH_HOST_CLEAN}" ] || [ -z "${SSH_USER_CLEAN}" ]; then
+            echo "Missing required secrets for remote prod deploy. Ensure SSH_PRIVATE_KEY, SSH_HOST, and SSH_USER are set."
+            exit 1
+          fi
+
+          echo "SSH_HOST_CLEAN=${SSH_HOST_CLEAN}" >> "$GITHUB_ENV"
+          echo "SSH_USER_CLEAN=${SSH_USER_CLEAN}" >> "$GITHUB_ENV"
+
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh-keyscan -H "$SSH_HOST_CLEAN" >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Create Ansible inventory
         run: |
           if [ "${{ inputs.deploy_env }}" = "prod" ] && [ "$RUNNER_NAME" != "vps-1" ]; then
             cat > infra/ansible/inventory.runner.ini <<EOF
           [server]
-          prod-target ansible_host=${{ secrets.SSH_HOST }} ansible_user=${{ secrets.SSH_USER }} ansible_python_interpreter=/usr/bin/python3 ansible_ssh_private_key_file=$HOME/.ssh/deploy_key
+          prod-target ansible_host=${SSH_HOST_CLEAN} ansible_user=${SSH_USER_CLEAN} ansible_python_interpreter=/usr/bin/python3 ansible_ssh_private_key_file=$HOME/.ssh/deploy_key
           EOF
           else
             cat > infra/ansible/inventory.runner.ini <<EOF
