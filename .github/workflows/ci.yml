@@ -78,6 +78,8 @@ jobs:
 
                   assert "services" in results[f"{base_url}/api/overview"]
                   assert isinstance(results[f"{base_url}/api/services"], list)
+                  overview = results[f"{base_url}/api/overview"]
+                  assert overview.get("backend_status") == "ok", f"backend_status is not ok: {overview}"
                   break
               except Exception:
                   if time.time() >= deadline:

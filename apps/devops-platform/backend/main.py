@@ -818,7 +818,7 @@ def check_http_target(url: str) -> tuple[bool, str]:
         if response.status_code < 400:
             return True, f"http {response.status_code}"
         return False, f"http {response.status_code}"
-    except httpx.HTTPError as exc:  # pragma: no cover
+    except Exception as exc:  # pragma: no cover – probe must never raise
         return False, str(exc)
 
 
