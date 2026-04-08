@@ -112,6 +112,5 @@ def test_overview_db_error(client):
     app.dependency_overrides[get_db] = override
     resp = client.get("/api/overview")
     app.dependency_overrides.clear()
-    app.dependency_overrides[get_db] = lambda: iter([next(original_get_db())])
     assert resp.status_code == 200
     assert resp.json()["database_status"] == "error"
