@@ -89,37 +89,21 @@ def test_overview_service_no_health_target(client):
     assert "no health target" in svc["detail"]
 
 
-def test_overview_db_error(client, monkeypatch):
-    from sqlalchemy.exc import OperationalError
-    import backend.main as main_module
-
-    original_compute = main_module.compute_overview
-
-    def failing_compute(db):
-        from sqlalchemy import text
-        try:
-            db.execute(text("SELECT 1 FROM nonexistent_table_xyz"))
-        except Exception:
-            pass
-        return original_compute(db)
-
-    # Monkeypatch the overview to force a DB exception path
+def test_overview_db_error(client):
     from sqlalchemy.exc import OperationalError as OpErr
+    import backend.main as main_module
+    from backend.database import get_db
 
     class FailingSession:
         def execute(self, *args, **kwargs):
             raise OpErr("SELECT 1", {}, Exception("DB down"))
 
         def query(self, *args, **kwargs):
-            # Return a minimal stub so the rest of the function works
             class Q:
                 def filter(self, *a, **kw): return self
                 def all(self): return []
                 def count(self): return 0
             return Q()
-
-    original_get_db = main_module.get_db
-    from backend.database import get_db
 
     def override():
         yield FailingSession()
