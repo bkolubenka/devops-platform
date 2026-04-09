@@ -1,0 +1,40 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "devops-platform: compose up",
+      "type": "shell",
+      "command": "docker",
+      "args": [
+        "compose",
+        "--env-file",
+        ".env.dev",
+        "-f",
+        "docker-compose.dev.yaml",
+        "up",
+        "--build"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/apps/devops-platform"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "devops-platform: compose down",
+      "type": "shell",
+      "command": "docker",
+      "args": [
+        "compose",
+        "--env-file",
+        ".env.dev",
+        "-f",
+        "docker-compose.dev.yaml",
+        "down"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/apps/devops-platform"
+      },
+      "problemMatcher": []
+    }
+  ]
+}
