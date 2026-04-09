@@ -1,7 +1,10 @@
 name: Deploy
-run-name: Deploy - ${{ inputs.deploy_env }}
+run-name: Deploy - ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_env || 'dev' }}
 
 on:
+  push:
+    branches:
+      - dev
   workflow_dispatch:
     inputs:
       deploy_env:
@@ -32,7 +35,7 @@ env:
 
 jobs:
   deploy:
-    runs-on: ${{ inputs.deploy_env == 'dev' && 'vm-1' || 'vps-1' }}
+    runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.deploy_env || 'dev') == 'dev' && 'vm-1' || 'vps-1' }}
 
     steps:
       - name: Checkout repository
