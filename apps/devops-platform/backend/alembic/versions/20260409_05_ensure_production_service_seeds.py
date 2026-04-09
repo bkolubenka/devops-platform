@@ -29,7 +29,9 @@ down_revision = "20260408_04"
 branch_labels = None
 depends_on = None
 
-_SERVICES = [
+# Services without a port use a separate INSERT that omits the port column so
+# psycopg2 does not need to infer the type of a Python None in a SELECT list.
+_SERVICES_WITH_PORT = [
     {
         "name": "backend",
         "service_type": "api",
@@ -41,19 +43,6 @@ _SERVICES = [
         "status": "running",
         "owner": "Platform",
         "runtime_target": "backend",
-        "control_mode": "restart_only",
-    },
-    {
-        "name": "frontend",
-        "service_type": "web-ui",
-        "description": "Static frontend served behind Nginx.",
-        "url": "http://frontend/",
-        "port": None,
-        "health_endpoint": "http://frontend/",
-        "environment": "all",
-        "status": "running",
-        "owner": "Frontend",
-        "runtime_target": "frontend",
         "control_mode": "restart_only",
     },
     {
@@ -87,44 +76,74 @@ _SERVICES = [
     },
 ]
 
+_SERVICES_WITHOUT_PORT = [
+    {
+        "name": "frontend",
+        "service_type": "web-ui",
+        "description": "Static frontend served behind Nginx.",
+        "url": "http://frontend/",
+        "health_endpoint": "http://frontend/",
+        "environment": "all",
+        "status": "running",
+        "owner": "Frontend",
+        "runtime_target": "frontend",
+        "control_mode": "restart_only",
+    },
+]
+
+_INSERT_WITH_PORT = sa.text(
+    """
+    INSERT INTO services (
+        name, service_type, description, url, port, health_endpoint,
+        environment, status, owner, runtime_target, control_mode
+    )
+    SELECT
+        :name, :service_type, :description, :url, :port, :health_endpoint,
+        :environment, :status, :owner, :runtime_target, :control_mode
+    WHERE NOT EXISTS (
+        SELECT 1 FROM services WHERE name = :name
+    )
+    """
+)
+
+_INSERT_WITHOUT_PORT = sa.text(
+    """
+    INSERT INTO services (
+        name, service_type, description, url, health_endpoint,
+        environment, status, owner, runtime_target, control_mode
+    )
+    SELECT
+        :name, :service_type, :description, :url, :health_endpoint,
+        :environment, :status, :owner, :runtime_target, :control_mode
+    WHERE NOT EXISTS (
+        SELECT 1 FROM services WHERE name = :name
+    )
+    """
+)
+
+_UPDATE_ENDPOINTS = sa.text(
+    """
+    UPDATE services
+    SET
+        health_endpoint = :health_endpoint,
+        url             = :url,
+        environment     = :environment,
+        description     = :description
+    WHERE name = :name
+    """
+)
+
 
 def upgrade() -> None:
     conn = op.get_bind()
-    for svc in _SERVICES:
-        # Insert if not present.
-        conn.execute(
-            sa.text(
-                """
-                INSERT INTO services (
-                    name, service_type, description, url, port, health_endpoint,
-                    environment, status, owner, runtime_target, control_mode
-                )
-                SELECT
-                    :name, :service_type, :description, :url, :port, :health_endpoint,
-                    :environment, :status, :owner, :runtime_target, :control_mode
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM services WHERE name = :name
-                )
-                """
-            ),
-            svc,
-        )
-        # Update the endpoint + environment for existing rows to match the
-        # correct production values set by previous migrations.
-        conn.execute(
-            sa.text(
-                """
-                UPDATE services
-                SET
-                    health_endpoint = :health_endpoint,
-                    url             = :url,
-                    environment     = :environment,
-                    description     = :description
-                WHERE name = :name
-                """
-            ),
-            svc,
-        )
+
+    for svc in _SERVICES_WITH_PORT:
+        conn.execute(_INSERT_WITH_PORT, svc)
+        conn.execute(_UPDATE_ENDPOINTS, svc)
+
+    for svc in _SERVICES_WITHOUT_PORT:
+        conn.execute(_INSERT_WITHOUT_PORT, svc)
+        conn.execute(_UPDATE_ENDPOINTS, svc)
 
 
 def downgrade() -> None:

@@ -867,12 +867,19 @@ def compute_overview(db: Session) -> OverviewResponse:
             healthy=default_healthy, detail=detail,
         )
 
-    backend_ok = service_states.get(
-        "backend", _default_overview("backend", "api"),
-    ).healthy
-    frontend_ok = service_states.get(
-        "frontend", _default_overview("frontend", "web-ui"),
-    ).healthy
+    # When a service isn't registered in the DB, fall back to a direct HTTP
+    # probe using the well-known internal address so the overview reflects the
+    # real state even if the services table is empty.
+    if "backend" in service_states:
+        backend_ok = service_states["backend"].healthy
+    else:
+        backend_ok, _ = check_http_target("http://127.0.0.1:8000/health")
+
+    if "frontend" in service_states:
+        frontend_ok = service_states["frontend"].healthy
+    else:
+        frontend_ok, _ = check_http_target("http://frontend/")
+
     # In production host Nginx serves traffic; if the request arrived it is working.
     nginx_default_ok = APP_ENVIRONMENT == "production"
     nginx_ok = service_states.get(
