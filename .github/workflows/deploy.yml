@@ -2,9 +2,11 @@ name: Deploy
 run-name: Deploy - ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_env || 'dev' }}
 
 on:
-  push:
-    branches:
-      - dev
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
   workflow_dispatch:
     inputs:
       deploy_env:
@@ -35,13 +37,14 @@ env:
 
 jobs:
   deploy:
+    if: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'dev') || github.event_name == 'workflow_dispatch' }}
     runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.deploy_env || 'dev') == 'dev' && 'vm-1' || 'vps-1' }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref }}
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -57,11 +60,11 @@ jobs:
         id: deploy_meta
         run: |
           echo "build_date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
-          tag="${{ inputs.image_tag }}"
+          tag="${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.image_tag }}"
           echo "image_tag=${tag::12}" >> "$GITHUB_OUTPUT"
 
       - name: Validate production deploy contract
-        if: ${{ inputs.deploy_env == 'prod' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_env == 'prod' }}
         run: |
           if [ "${{ inputs.rollback_to_previous }}" = "false" ]; then
             if [ -z "${{ inputs.image_tag }}" ] || [ "${{ inputs.image_tag }}" = "main" ]; then
@@ -75,7 +78,7 @@ jobs:
           fi
 
       - name: Set up SSH for remote deployment
-        if: ${{ inputs.deploy_env == 'prod' && runner.name != 'vps-1' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_env == 'prod' && runner.name != 'vps-1' }}
         env:
           SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -100,7 +103,9 @@ jobs:
 
       - name: Create Ansible inventory
         run: |
-          if [ "${{ inputs.deploy_env }}" = "prod" ] && [ "$RUNNER_NAME" != "vps-1" ]; then
+          DEPLOY_ENV_VALUE="${{ github.event_name == 'workflow_run' && 'dev' || inputs.deploy_env }}"
+
+          if [ "$DEPLOY_ENV_VALUE" = "prod" ] && [ "$RUNNER_NAME" != "vps-1" ]; then
             cat > infra/ansible/inventory.runner.ini <<EOF
           [server]
           prod-target ansible_host=${SSH_HOST_CLEAN} ansible_user=${SSH_USER_CLEAN} ansible_python_interpreter=/usr/bin/python3 ansible_ssh_private_key_file=$HOME/.ssh/deploy_key
@@ -115,9 +120,9 @@ jobs:
       - name: Run deploy playbook
         env:
           ANSIBLE_BECOME_PASSWORD: ${{ secrets.BECOME_PASSWORD }}
-          DEPLOY_ENV: ${{ inputs.deploy_env }}
+          DEPLOY_ENV: ${{ github.event_name == 'workflow_run' && 'dev' || inputs.deploy_env }}
           DEPLOY_REPO_URL: ${{ github.server_url }}/${{ github.repository }}.git
-          DEPLOY_REPO_REF: ${{ github.ref_name }}
+          DEPLOY_REPO_REF: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_branch || github.ref_name }}
           DEPLOY_CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           DEPLOY_GHCR_OWNER: ${{ github.repository_owner }}
           DEPLOY_IMAGE_TAG: ${{ steps.deploy_meta.outputs.image_tag }}
