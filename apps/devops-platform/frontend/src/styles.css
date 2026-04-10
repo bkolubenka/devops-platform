@@ -568,7 +568,7 @@ details[open] .build-summary::before {
   }
 
   .grafana-embed {
-    height: 620px;
+    height: clamp(760px, calc(100vw - 280px), 980px);
   }
 }
 
