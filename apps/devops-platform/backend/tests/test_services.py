@@ -75,3 +75,20 @@ def test_service_port_validation(client):
     bad = {**SAMPLE_SERVICE, "port": 99999}
     resp = client.post("/api/services", json=bad)
     assert resp.status_code == 422
+
+
+def test_list_services_backfills_production_baseline(client, monkeypatch):
+    import backend.main as main_module
+
+    monkeypatch.setattr(main_module, "APP_ENVIRONMENT", "production")
+    monkeypatch.setattr(main_module, "ENV_SHORT", "production")
+
+    resp = client.get("/api/services")
+
+    assert resp.status_code == 200
+    assert {service["name"] for service in resp.json()} == {
+        "backend",
+        "frontend",
+        "monitor-worker",
+        "nginx",
+    }

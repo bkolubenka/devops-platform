@@ -77,3 +77,18 @@ def test_create_project_validation(client):
     bad = {"title": "X", "description": "short", "technologies": []}
     resp = client.post("/api/portfolio/projects", json=bad)
     assert resp.status_code == 422
+
+
+def test_list_projects_backfills_production_baseline(client, monkeypatch):
+    import backend.main as main_module
+
+    monkeypatch.setattr(main_module, "APP_ENVIRONMENT", "production")
+    monkeypatch.setattr(main_module, "ENV_SHORT", "production")
+
+    resp = client.get("/api/portfolio/projects")
+
+    assert resp.status_code == 200
+    assert {project["title"] for project in resp.json()} == {
+        "DevOps Platform",
+        "AIOps Incident Assistant",
+    }

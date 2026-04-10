@@ -114,3 +114,28 @@ def test_overview_db_error(client):
     app.dependency_overrides.clear()
     assert resp.status_code == 200
     assert resp.json()["database_status"] == "error"
+
+
+def test_overview_backfills_production_baseline(client, monkeypatch):
+    import backend.main as main_module
+
+    def fake_check_http_target(url):
+        return True, "http 200"
+
+    monkeypatch.setattr(main_module, "APP_ENVIRONMENT", "production")
+    monkeypatch.setattr(main_module, "ENV_SHORT", "production")
+    monkeypatch.setattr(main_module, "check_http_target", fake_check_http_target)
+
+    resp = client.get("/api/overview")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["project_count"] == 2
+    assert data["featured_project_count"] == 2
+    assert data["service_count"] == 3
+    assert data["healthy_service_count"] == 3
+    assert {service["name"] for service in data["services"]} == {
+        "backend",
+        "frontend",
+        "monitor-worker",
+    }
