@@ -106,35 +106,53 @@
         state: directory
         mode: "0755"
 
+    - name: Set bootstrap certificate target for dev
+      set_fact:
+        bootstrap_cert_name: "{{ local_domain }}"
+        bootstrap_cert_domains:
+          - "{{ local_domain }}"
+      when: deploy_env == 'dev'
+
+    - name: Set bootstrap certificate target for prod
+      set_fact:
+        bootstrap_cert_name: "{{ domain_name }}"
+        bootstrap_cert_domains:
+          - "{{ domain_name }}"
+          - "{{ domain_www }}"
+      when: deploy_env == 'prod'
+
     - name: Check for existing letsencrypt certificate
       stat:
-        path: "/etc/letsencrypt/live/{{ domain_name }}/fullchain.pem"
+        path: "/etc/letsencrypt/live/{{ bootstrap_cert_name }}/fullchain.pem"
       register: existing_cert
 
     - name: Check for existing letsencrypt private key
       stat:
-        path: "/etc/letsencrypt/live/{{ domain_name }}/privkey.pem"
+        path: "/etc/letsencrypt/live/{{ bootstrap_cert_name }}/privkey.pem"
       register: existing_key
 
-    - name: Check if existing certificate covers local_domain SAN
+    - name: Check if existing certificate covers requested SANs
       shell: >-
         openssl x509 -noout -text
-        -in "/etc/letsencrypt/live/{{ domain_name }}/fullchain.pem"
-        | grep -qF "{{ local_domain }}"
-      register: local_domain_in_cert
+        -in "/etc/letsencrypt/live/{{ bootstrap_cert_name }}/fullchain.pem"
+        | grep -qF "{{ item }}"
+      loop: "{{ bootstrap_cert_domains }}"
+      register: cert_san_checks
       changed_when: false
       failed_when: false
       when: existing_cert.stat.exists and existing_key.stat.exists
 
     - name: Set SSL issuance flag
       set_fact:
-        ssl_needs_issue: "{{ not (existing_cert.stat.exists and existing_key.stat.exists) or (local_domain_in_cert is defined and local_domain_in_cert.rc | default(0) != 0) }}"
+        ssl_needs_issue: "{{ not (existing_cert.stat.exists and existing_key.stat.exists) or (cert_san_checks is defined and (cert_san_checks.results | selectattr('rc', 'ne', 0) | list | length > 0)) }}"
 
     - name: Debug SSL status
       debug:
         msg: |
           cert_exists={{ existing_cert.stat.exists | default(false) }}
           key_exists={{ existing_key.stat.exists | default(false) }}
+          bootstrap_cert_name={{ bootstrap_cert_name }}
+          bootstrap_cert_domains={{ bootstrap_cert_domains }}
           ssl_needs_issue={{ ssl_needs_issue }}
           cf_api_token_length={{ cf_api_token | length }}
 
@@ -160,12 +178,13 @@
     - name: Obtain SSL certificate via Cloudflare DNS-01 challenge
       command: >-
         certbot certonly
+        --cert-name {{ bootstrap_cert_name }}
         --dns-cloudflare
         --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini
         --dns-cloudflare-propagation-seconds 30
         --agree-tos --email {{ ssl_email }}
         --expand
-        -d {{ domain_name }} -d {{ domain_www }} -d {{ local_domain }}
+        -d {{ bootstrap_cert_domains | join(' -d ') }}
         --non-interactive
       register: certbot_dns_result
       when:
@@ -184,9 +203,10 @@
     - name: Obtain SSL certificate via standalone HTTP-01 challenge
       command: >-
         certbot certonly --standalone
+        --cert-name {{ bootstrap_cert_name }}
         --agree-tos --email {{ ssl_email }}
         --expand
-        -d {{ domain_name }} -d {{ domain_www }} -d {{ local_domain }}
+        -d {{ bootstrap_cert_domains | join(' -d ') }}
         --non-interactive
       register: certbot_standalone_result
       failed_when: false
@@ -220,7 +240,7 @@
 
     - name: Verify SSL certificate exists after issuance
       stat:
-        path: "/etc/letsencrypt/live/{{ domain_name }}/{{ item }}"
+        path: "/etc/letsencrypt/live/{{ bootstrap_cert_name }}/{{ item }}"
       register: post_issue_cert_check
       loop:
         - fullchain.pem
@@ -228,7 +248,7 @@
 
     - name: Fail if SSL certificate is still missing
       fail:
-        msg: "SSL certificate for {{ domain_name }} is not present at /etc/letsencrypt/live/{{ domain_name }}/. Bootstrap cannot continue."
+        msg: "SSL certificate for {{ bootstrap_cert_name }} is not present at /etc/letsencrypt/live/{{ bootstrap_cert_name }}/. Bootstrap cannot continue."
       when: (post_issue_cert_check.results | selectattr('stat.exists', 'equalto', false) | list | length) > 0
 
     # --- Ensure nginx is running ----------------------------------------------
@@ -266,6 +286,6 @@
           - Docker installed and running
           - Nginx installed and enabled
           - UFW enabled (22, 80, 443)
-          - SSL certificate issued for {{ domain_name }} and {{ domain_www }}
+          - SSL certificate issued for {{ bootstrap_cert_name }}
           - Auto-renewal cron configured (daily 12:00 UTC)
           Next: run playbook.yml to deploy the application.
