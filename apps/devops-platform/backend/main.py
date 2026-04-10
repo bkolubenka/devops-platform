@@ -265,6 +265,105 @@ SERVICE_ACTION_POLICIES: dict[str, dict[str, Any]] = {
         "control_plane": False,
     },
 }
+
+DEFAULT_PRODUCTION_PROJECTS: list[dict[str, Any]] = [
+    {
+        "title": "DevOps Platform",
+        "description": (
+            "Full-cycle DevOps portal with containerized services, "
+            "Ansible deployment, GitHub Actions CI/CD, and incident assistance."
+        ),
+        "technologies": [
+            "Python",
+            "FastAPI",
+            "Docker",
+            "Nginx",
+            "Ansible",
+            "GitHub Actions",
+        ],
+        "github_url": "https://github.com/bkolubenka/devops-platform",
+        "demo_url": "http://localhost/",
+        "image_url": None,
+        "category": "Platform",
+        "status": "running",
+        "owner": "Meirambek Kydyrov",
+        "featured": True,
+    },
+    {
+        "title": "AIOps Incident Assistant",
+        "description": (
+            "Deterministic service-aware assistant that classifies incidents "
+            "and suggests runbooks using current platform health and service metadata."
+        ),
+        "technologies": ["FastAPI", "PostgreSQL", "Nginx", "AIOps"],
+        "github_url": None,
+        "demo_url": None,
+        "image_url": None,
+        "category": "AI/ML",
+        "status": "running",
+        "owner": "Meirambek Kydyrov",
+        "featured": True,
+    },
+]
+
+DEFAULT_PRODUCTION_SERVICES: list[dict[str, Any]] = [
+    {
+        "name": "backend",
+        "service_type": "api",
+        "description": "FastAPI application serving overview, CRUD, and incident assistant endpoints.",
+        "url": "http://127.0.0.1:8000/",
+        "port": 8000,
+        "health_endpoint": "http://127.0.0.1:8000/health",
+        "environment": "all",
+        "status": "running",
+        "owner": "Platform",
+        "runtime_target": "backend",
+        "control_mode": "restart_only",
+    },
+    {
+        "name": "frontend",
+        "service_type": "web-ui",
+        "description": "Static frontend served behind Nginx.",
+        "url": "http://frontend/",
+        "port": None,
+        "health_endpoint": "http://frontend/",
+        "environment": "all",
+        "status": "running",
+        "owner": "Frontend",
+        "runtime_target": "frontend",
+        "control_mode": "restart_only",
+    },
+    {
+        "name": "nginx",
+        "service_type": "reverse-proxy",
+        "description": "Ingress container routing traffic (dev only; prod uses host Nginx).",
+        "url": "http://nginx/",
+        "port": 80,
+        "health_endpoint": "http://nginx/health",
+        "environment": "dev",
+        "status": "running",
+        "owner": "Platform",
+        "runtime_target": "nginx",
+        "control_mode": "restart_only",
+    },
+    {
+        "name": "monitor-worker",
+        "service_type": "ops-worker",
+        "description": (
+            "Minute-based platform monitor that checks service health, records "
+            "operational events, and powers incident autofill."
+        ),
+        "url": "http://monitor-worker:9000/",
+        "port": 9000,
+        "health_endpoint": "http://monitor-worker:9000/health",
+        "environment": "all",
+        "status": "running",
+        "owner": "Platform",
+        "runtime_target": "monitor_worker",
+        "control_mode": "managed",
+    },
+]
+
 app = FastAPI(title="DevOps Platform API", version=APP_VERSION)
 
 app.add_middleware(
@@ -545,6 +644,101 @@ def serialize_service(service: DBService) -> ServiceRead:
         control_plane=policy.get("control_plane", False),
         allowed_actions=policy.get("allowed_actions", []),
     )
+
+
+def _set_if_changed(model: Any, field: str, value: Any) -> bool:
+    if getattr(model, field) == value:
+        return False
+    setattr(model, field, value)
+    return True
+
+
+def _upsert_default_project(db: Session, payload: dict[str, Any]) -> bool:
+    project = db.query(DBProject).filter(DBProject.title == payload["title"]).first()
+    technologies = json.dumps(payload["technologies"])
+
+    if project is None:
+        db.add(
+            DBProject(
+                title=payload["title"],
+                description=payload["description"],
+                technologies=technologies,
+                github_url=payload["github_url"],
+                demo_url=payload["demo_url"],
+                image_url=payload["image_url"],
+                category=payload["category"],
+                status=payload["status"],
+                owner=payload["owner"],
+                featured=payload["featured"],
+                is_active=True,
+            )
+        )
+        return True
+
+    changed = False
+    changed |= _set_if_changed(project, "description", payload["description"])
+    changed |= _set_if_changed(project, "technologies", technologies)
+    changed |= _set_if_changed(project, "github_url", payload["github_url"])
+    changed |= _set_if_changed(project, "demo_url", payload["demo_url"])
+    changed |= _set_if_changed(project, "image_url", payload["image_url"])
+    changed |= _set_if_changed(project, "category", payload["category"])
+    changed |= _set_if_changed(project, "status", payload["status"])
+    changed |= _set_if_changed(project, "owner", payload["owner"])
+    changed |= _set_if_changed(project, "featured", payload["featured"])
+    changed |= _set_if_changed(project, "is_active", True)
+    return changed
+
+
+def _upsert_default_service(db: Session, payload: dict[str, Any]) -> bool:
+    service = db.query(DBService).filter(DBService.name == payload["name"]).first()
+
+    if service is None:
+        db.add(
+            DBService(
+                name=payload["name"],
+                service_type=payload["service_type"],
+                description=payload["description"],
+                url=payload["url"],
+                port=payload["port"],
+                health_endpoint=payload["health_endpoint"],
+                environment=payload["environment"],
+                status=payload["status"],
+                owner=payload["owner"],
+                runtime_target=payload["runtime_target"],
+                control_mode=payload["control_mode"],
+                is_active=True,
+            )
+        )
+        return True
+
+    changed = False
+    changed |= _set_if_changed(service, "service_type", payload["service_type"])
+    changed |= _set_if_changed(service, "description", payload["description"])
+    changed |= _set_if_changed(service, "url", payload["url"])
+    changed |= _set_if_changed(service, "port", payload["port"])
+    changed |= _set_if_changed(service, "health_endpoint", payload["health_endpoint"])
+    changed |= _set_if_changed(service, "environment", payload["environment"])
+    changed |= _set_if_changed(service, "status", payload["status"])
+    changed |= _set_if_changed(service, "owner", payload["owner"])
+    changed |= _set_if_changed(service, "runtime_target", payload["runtime_target"])
+    changed |= _set_if_changed(service, "control_mode", payload["control_mode"])
+    changed |= _set_if_changed(service, "is_active", True)
+    return changed
+
+
+def ensure_production_baseline_catalog(db: Session) -> None:
+    if APP_ENVIRONMENT != "production":
+        return
+
+    changed = False
+    for project in DEFAULT_PRODUCTION_PROJECTS:
+        changed |= _upsert_default_project(db, project)
+
+    for service in DEFAULT_PRODUCTION_SERVICES:
+        changed |= _upsert_default_service(db, service)
+
+    if changed:
+        db.commit()
 
 
 def serialize_incident(incident: DBIncident) -> IncidentRead:
@@ -849,6 +1043,9 @@ def compute_overview(db: Session) -> OverviewResponse:
         db.execute(text("SELECT 1"))
     except Exception:
         database_status = "error"
+
+    if database_status == "ok":
+        ensure_production_baseline_catalog(db)
 
     services = [
         build_service_overview(service)
@@ -1206,6 +1403,7 @@ def get_overview(db: Session = Depends(get_db)) -> OverviewResponse:
 
 @app.get("/api/portfolio/projects", response_model=list[ProjectRead])
 def get_projects(db: Session = Depends(get_db)) -> list[ProjectRead]:
+    ensure_production_baseline_catalog(db)
     projects = db.query(DBProject).filter(DBProject.is_active.is_(True)).all()
     return [serialize_project(project) for project in projects]
 
@@ -1310,6 +1508,7 @@ def create_skill(skill: SkillCreate, db: Session = Depends(get_db)) -> SkillRead
 
 @app.get("/api/services", response_model=list[ServiceRead])
 def get_services(db: Session = Depends(get_db)) -> list[ServiceRead]:
+    ensure_production_baseline_catalog(db)
     services = db.query(DBService).filter(DBService.is_active.is_(True)).all()
     return [serialize_service(service) for service in services]
 
