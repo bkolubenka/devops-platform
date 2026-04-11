@@ -56,7 +56,7 @@ The dev VM now also uses a host TLS edge, so `https://local.kydyrov.dev` is reac
 
 - Python 3.11
 - FastAPI
-- React 18
+- React 19
 - TypeScript
 - Vite
 - SQLAlchemy
