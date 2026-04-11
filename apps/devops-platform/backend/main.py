@@ -34,10 +34,13 @@ CONTAINER_REGISTRY = os.getenv("CONTAINER_REGISTRY", "local-build")
 COMPONENT_VERSIONS = {
     "Python": "3.11",
     "Frontend": APP_VERSION,
+    "React": "19.2.5",
+    "TypeScript": "6.0.2",
+    "Vite": "8.0.8",
     "Backend": APP_VERSION,
-    "FastAPI": "0.115.12",
-    "SQLAlchemy": "2.0.36",
-    "Alembic": "1.14.0",
+    "FastAPI": "0.135.3",
+    "SQLAlchemy": "2.0.49",
+    "Alembic": "1.18.4",
     "PostgreSQL": "15-alpine",
     "Nginx": "1.27-alpine",
 }
