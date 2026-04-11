@@ -1549,6 +1549,7 @@ function EnvironmentCard({ title, current, online, href }: EnvironmentCardProps)
     );
   }
 
+
   return online ? (
     <a className="card env-card-link" href={href}>
       <div className="label">{title}</div>
