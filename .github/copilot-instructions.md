@@ -46,6 +46,7 @@ Keep changes aligned with the current VM-based deployment model.
 
 - Prefer small, verifiable changes.
 - Do not invent features that are not in the repo.
+- For any server debugging task, use .github/skills/server-debugging/SKILL.md first.
 - Keep `README.md`, `AGENTS.md`, workflows, Ansible, and compose files consistent.
 - Preserve the `/`, `/api/*`, and `/health` routing contract.
 - Keep healthchecks and Dockerfile entrypoints compatible with the actual image layout.

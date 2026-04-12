@@ -5,7 +5,7 @@ description: "Use when debugging this project's servers, deployments, or termina
 
 # Server Debugging
 
-Use this skill for server-side issues in this repository, especially when the active terminal may already be on vm-1, vps-1, or inside WSL.
+Use this skill for server-side issues in this repository, especially when the active terminal may already be on vm-1, vps-1, inside WSL, or running natively on Windows.
 
 ## Start State
 
@@ -13,7 +13,7 @@ Before changing anything, identify where you are now.
 
 This step is mandatory. Do not run server checks, SSH commands, Ansible commands, or service commands until this context check is completed and reported.
 
-Run these checks in the current terminal:
+Run these checks in the current terminal when a Unix shell is available:
 
 ```bash
 hostname
@@ -30,6 +30,7 @@ Interpretation:
 - If `hostname` is `vm-1`, stay on the machine and debug locally.
 - If `hostname` is `vps-1`, stay on the VPS and debug locally.
 - If the shell is WSL, treat it as the development workstation and use SSH or local services as appropriate.
+- If the terminal is native Windows, treat it as the workstation shell and connect to the target host with SSH instead of assuming WSL.
 - If the terminal is already on the target server, do not SSH again just to repeat the same checks.
 
 ## Ways To Reach Hosts
@@ -38,10 +39,12 @@ Use the simplest path that matches the current shell:
 
 - From WSL on the workstation, reach `vm-1` with `ssh make@192.168.10.22`.
 - From WSL on the workstation, reach `vps-1` with `ssh make@204.168.184.213`.
+- From native Windows on the workstation, reach `vm-1` with `ssh make@192.168.10.22`.
+- From native Windows on the workstation, reach `vps-1` with `ssh make@204.168.184.213`.
 - If the current shell is already on `vm-1` or `vps-1`, stay local and inspect the host directly.
 - If you need a quick inventory-wide reachability check, use `ansible -i infra/ansible/inventory.ini all -m ping`.
 - If you need a deeper health check, use `ansible -i infra/ansible/inventory.ini <host> -m shell -a '<command>'`.
-- If you are on Windows outside WSL, open WSL first and use the same SSH commands from there.
+- If SSH is unavailable on native Windows, open WSL as a fallback and use the same SSH commands from there.
 
 ## Repository-Specific Context
 

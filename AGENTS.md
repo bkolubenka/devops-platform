@@ -66,6 +66,7 @@ Infrastructure is split into two Ansible playbooks:
 
 - Prefer small, working, verifiable changes over broad speculative rewrites.
 - Avoid introducing manual server setup unless explicitly requested.
+- For any server debugging task, use .github/skills/server-debugging/SKILL.md first.
 - Preserve the working `/`, `/api/*`, and `/health` routing behavior.
 - Keep Ansible idempotent and readable.
 - Prefer variables in `infra/ansible/group_vars/all.yml` over scattered hardcoding.
