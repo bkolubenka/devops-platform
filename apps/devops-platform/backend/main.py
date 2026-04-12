@@ -371,7 +371,11 @@ app = FastAPI(title="DevOps Platform API", version=APP_VERSION)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://kydyrov.dev",
+        "https://www.kydyrov.dev",
+        "https://local.kydyrov.dev",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
